@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block content %}
+    <div class="container">
+        <div class="row">
+            <div class="col-sm-12">
+                <h3>Open Nodes</h3>
+                <h4>Purpose</h4>
+                <p>
+                    Open Nodes aims to map out and compare the status of several Satoshi-based coin networks. Despite
+                    the fact that these coins share the same protocol, there currently exists no easy way to directly
+                    compare these coins in a single location. Additionally, no data is currently available for Dash
+                    full nodes, only masternodes. These statistics are essential to evaluate the relative health of each
+                    network.
+                </p>
+
+                <h4>Overview</h4>
+                <p>
+                    Open Nodes maps out the network by recursively connecting to nodes and issuing <i>getaddr</i>
+                    commands. Any connected nodes that have been online in the past 24 hours are then added to the
+                    crawl. Only nodes which are configured to allow remote connections and accept the handshake from the
+                    crawler are included in the presented dataset. Nodes with a version number below the minimum are
+                    also excluded. All nodes are designated as "Active" or "Inactive" based on the last reported block
+                    height. If the node's block height is more than an hour out of consensus with the network median
+                    then it is flagged as inactive.
+                </p>
+
+                <h5>The following constants are used for the handshake:</h5>
+                <ul>
+                    <li><b>Bitcoin:</b>
+                        <ul>
+                            <li><i>Magic number:</i> f9beb4d9</li>
+                            <li><i>Protocol version:</i> 70015</li>
+                            <li><i>Minimum version:</i> 70001</li>
+                        </ul>
+                    </li>
+                    <li><b>Bitcoin Cash + SV:</b>
+                        <ul>
+                            <li><i>Magic number:</i> e3e1f3e8</li>
+                            <li><i>Protocol version:</i> 70015</li>
+                            <li><i>Minimum version:</i> 70001</li>
+                        </ul>
+                    </li>
+                    <li><b>Dash:</b>
+                        <ul>
+                            <li><i>Magic number:</i> bf0c6bbd</li>
+                            <li><i>Protocol version:</i> 70209</li>
+                            <li><i>Minimum version:</i> 70001</li>
+                        </ul>
+                    </li>
+                    <li><b>Litecoin:</b>
+                        <ul>
+                            <li><i>Magic number:</i> fbc0b6db</li>
+                            <li><i>Protocol version:</i> 70015</li>
+                            <li><i>Minimum version:</i> 70001</li>
+                        </ul>
+                    </li>
+                </ul>
+
+                Bitcoin SV is extracted from the Bitcoin Cash crawl set based on the user agent.<br><br>
+
+                Some user agents are excluded from the result set based on the following regular expressions:
+                <ul>
+                    <li>/Monoeci.*?</li>
+                    <li>/Binarium.*?</li>
+                    <li>/Qyno.*?</li>
+                    <li>/Monaco.*?</li>
+                    <li>/DigitalCoin.*?</li>
+                    <li>/FlashCoin.*?</li>
+                    <li>/WaterTechnology.*?</li>
+                    <li>/WorldCoin.*?</li>
+                    <li>/FeatherCoin.*?</li>
+                    <li>/CryptoCoin.*?</li>
+                    <li>/Sollida.*?</li>
+                </ul>
+            </div>
+        </div>
+
+    </div>
+
+    {% include 'footer.html' %}
+{% endblock %}

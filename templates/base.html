@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="description" content="">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <script src="/static/js/d3.min.js"></script>
+    <script src="/static/js/crossfilter.min.js"></script>
+    <script src="/static/js/dc.min.js"></script>
+    <link href="/static/css/dc.min.css" rel="stylesheet" type="text/css"/>
+    <script src="/static/js/jquery.slim.min.js"></script>
+    <script src="/static/js/jquery-ui.min.js"></script>
+    <script src="/static/js/bootstrap.bundle.min.js"></script>
+    <link href="/static/css/jquery-ui.min.css" rel="stylesheet" type="text/css"/>
+    <link href="/static/css/bootstrap.yeti.min.css" rel="stylesheet" type="text/css"/>
+    <link href="/static/css/custom.css" rel="stylesheet" type="text/css"/>
+    <link href="/static/flags/flags.min.css" rel="stylesheet" type="text/css"/>
+
+    <title>Open Nodes</title>
+
+    <!-- Favicon -->
+    <link rel="icon" href="../static/img/network.svg">
+
+</head>
+
+<body>
+
+<header class="header_area animated">
+    <div class="container-fluid">
+        <div class="row align-items-center">
+            <!-- Menu Area Start -->
+            <div class="col-12 col-lg-12">
+                <div class="menu_area">
+                    <nav class="navbar navbar-expand-lg navbar-light">
+                        <!-- Logo -->
+                        <div class="navbar-brand">
+                            <img src="/static/img/network.svg" width="40px">
+                        </div>
+                        <div class="navbar-brand">
+                            <a>Open Nodes</a>
+                        </div>
+
+                        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#ca-navbar"
+                                aria-controls="ca-navbar" aria-expanded="false" aria-label="Toggle navigation"><span
+                                class="navbar-toggler-icon"></span></button>
+                        <!-- Menu Area -->
+                        <div class="collapse navbar-collapse" id="ca-navbar">
+                            <ul class="navbar-nav ml-auto navbar-center" id="nav">
+                                <li class="nav-item active"><a class="nav-link" href="/"><img width="24px" class="d-inline-block mr-1" src="/static/img/world.png"/>Home</a></li>
+                                <li class="nav-item ml-3"><a class="nav-link" href="/networks/bitcoin"><img width="24px" class="d-inline-block mr-1" src="/static/img/bitcoin.png"/>Bitcoin</a></li>
+                                <li class="nav-item ml-3"><a class="nav-link" href="/networks/dash"><img width="26px" class="d-inline-block mr-1" src="/static/img/dash.png"/>Dash</a></li>
+                                <li class="nav-item ml-3"><a class="nav-link" href="/networks/litecoin"><img width="24px" class="d-inline-block mr-1" src="/static/img/litecoin.png"/>Litecoin</a></li>
+                                <li class="nav-item ml-3"><a class="nav-link" href="/networks/bitcoin-cash"><img width="24px" class="d-inline-block mr-1" src="/static/img/bitcoin-cash.png"/>Bitcoin Cash</a></li>
+                                <li class="nav-item ml-3"><a class="nav-link" style="margin-top: -6px;" href="/networks/bitcoin-sv"><img width="32px" style="margin-top: 3px;" class="d-inline-block mr-1" src="/static/img/bitcoin-sv.png"/>Bitcoin SV</a></li>
+                            </ul>
+                            <ul class="navbar-nav ml-auto navbar-right" id="nav-right">
+                                <li class="nav-item ml-3"><a class="nav-link" href="https://github.com/blakebjorn/opennodes">Github</a></li>
+                                <li class="nav-item ml-3"><a class="nav-link" href="/about">About</a></li>
+                            </ul>
+                        </div>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+<!-- ***** Header Area End ***** -->
+<hr style="margin-top:0;">
+
+{% with messages = get_flashed_messages() %}
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-info">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+{% block content %}
+{% endblock %}
+
+</body>
+</html>

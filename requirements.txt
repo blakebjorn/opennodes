@@ -1,0 +1,11 @@
+wheel
+geoip2
+ipaddress
+PySocks
+requests
+sqlalchemy
+flask_sqlalchemy
+numpy
+pandas
+pyyaml
+uwsgi

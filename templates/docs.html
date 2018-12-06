@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block content %}
+    <title>
+        API Documentation
+    </title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            font-family: Verdana, "Helvetica Neue", Arial, Helvetica, Geneva, sans-serif;
+        }
+
+        body {
+            margin: 10px;
+        }
+
+        div.mapping {
+            margin: 20px 20px;
+        }
+
+        ul.methods:before {
+            content: "Methods: ";
+        }
+
+        ul.methods li {
+            display: inline;
+            list-style: none;
+        }
+
+        ul.methods li:after {
+            content: ",";
+        }
+
+        ul.methods li:last-child:after {
+            content: "";
+        }
+
+        ul.arguments li {
+            list-style: none;
+        }
+
+        ul.arguments .argument {
+            font-style: italic
+        }
+
+        .docstring:before {
+            content: "Description: ";
+        }
+    </style>
+
+
+    <body>
+
+    <h2>API Reference</h2>
+
+    {% for doc in autodoc %}
+        <div class="mapping">
+            <a id="rule-{{ doc.rule|urlencode }}" class="rule"><h3>{{ doc.rule|escape }}</h3></a>
+
+            <p class="docstring">{{ doc.docstring|urlize|nl2br }}</p>
+
+            <ul class="methods">
+                {% for method in doc.methods -%}
+                    {% if method == 'GET' and doc.args == ['None'] %}
+                        <a href="{{ doc.rule }}" class="getmethod">
+                            <li class="method">{{ method }}</li>
+                        </a>
+                    {% else %}
+                        <li class="method">{{ method }}</li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+
+            {% if doc.args %}
+                <ul class="arguments">Arguments:<br>
+                    {% for arg in doc.args %}
+                        <li><span class="argument">{{ arg[1] }}</span> {{ arg[2] }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+
+            {% if doc.returns %}
+                Returns: {{ doc.returns[0][1] }}
+            {% endif %}
+        </div>
+    {% endfor %}
+
+
+{% endblock %}

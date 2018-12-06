@@ -1,0 +1,1223 @@
+{% extends "base.html" %}
+{% block content %}
+
+    <style>
+        {% if not network %}
+            @media only screen and (max-width: 992px) {
+                #summary-table tr th:nth-child(3), #summary-table tr td:nth-child(3),
+                #summary-table tr th:nth-child(5), #summary-table tr td:nth-child(5),
+                #summary-table tr th:nth-child(7), #summary-table tr td:nth-child(7) {
+                    display: none;
+                }
+            }
+        {% else %}
+            @media only screen and (max-width: 992px) {
+                #summary-table tr th:nth-child(3), #summary-table tr td:nth-child(3),
+                #summary-table tr th:nth-child(4), #summary-table tr td:nth-child(4),
+                #summary-table tr th:nth-child(7), #summary-table tr td:nth-child(7),
+                #summary-table tr th:nth-child(9), #summary-table tr td:nth-child(9) {
+                    display: none;
+                }
+
+                #summary-table tr th:nth-child(1), #summary-table tr td:nth-child(1),
+                #summary-table tr th:nth-child(2), #summary-table tr td:nth-child(2) {
+                    max-width: 15%;
+                    padding: 1px 2px 1px 2px;
+                }
+            }
+
+        {% endif %}
+    </style>
+
+
+    <section class="special-area bg-white section_padding_100" id="about">
+        <div class="row mt-3">
+            <div class="col" align="center">
+                <h1>{% if network %}{{ network | replace("-"," ") | title }}{% else %}World Overview{% endif %}</h1>
+            </div>
+        </div>
+
+        <div class="container mb-5" id="loading_container" style="max-width:90%; min-height:40%;">
+            <div class="view overlay">
+                <div class="container" align="center" style="padding: 0px 0px">
+                    <div id="loading_spinner" class="loading_spinner" style="margin: 15px 15px"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="container" id="content_main" style="display: none;">
+            <div class="row">
+                <div class="col" align="center">
+                    <div class="col dc-nd my-3" align="center">
+                        <span id="total_nodes_counter" class="number-display" style="color:steelblue;"></span>
+                        nodes running on
+                        <span id="total_servers_counter" class="number-display" style="color:steelblue;"></span>
+                        servers in
+                        <span id="total_countries_counter" class="number-display" style="color:steelblue;"></span>
+                        countries.
+                    </div>
+                </div>
+            </div>
+            <div class="w-100"></div>
+
+            <div class="row">
+                <div class="col-12">
+                    <div class="section-heading text-center">
+                        <div class="line-shape"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col mx-auto" id="map-chart-container">
+                    <div id="world-chart"></div>
+                </div>
+                <div id="world-table"
+                     class="col mx-auto dc-table-small table table-hover table-striped table-scroll-long"></div>
+                <div class="w-100"></div>
+            </div>
+
+            <div class="row">
+                <div class="col dc-pie-cont-legend mx-auto">
+                    <div class="row">
+                        <div id="aso-chart" class="col dc-pie"></div>
+                        <div class="w-100"></div>
+                    </div>
+                    <div class="row">
+                        <div id="aso-table"
+                             class="col dc-table-small table table-hover table-striped table-scroll"></div>
+                        <div class="w-100"></div>
+                    </div>
+                </div>
+
+                {% if include_network %}
+                    <div class="col dc-pie-cont-legend mx-auto">
+                        <div class="row">
+                            <div id="network-chart" class="col dc-pie"></div>
+                            <div class="w-100"></div>
+                        </div>
+                        <div class="row">
+                            <div id="network-table"
+                                 class="col dc-table-small table table-hover table-striped table-scroll"></div>
+                            <div class="w-100"></div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                {% if include_user_agent %}
+                    <div class="col dc-pie-cont-legend mx-auto">
+                        <div class="row">
+                            <div id="user_agent-chart" class="col dc-pie"></div>
+                            <div class="w-100"></div>
+                        </div>
+                        <div class="row">
+                            <div id="user_agent-table"
+                                 class="col dc-table-small table table-hover table-striped table-scroll"></div>
+                            <div class="w-100"></div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                {% if include_client %}
+                    <div class="col dc-pie-cont-legend mx-auto">
+                        <div class="row">
+                            <div id="client-chart" class="col-12 dc-pie"></div>
+                            <div class="w-100"></div>
+                        </div>
+                        <div class="row">
+                            <div id="client-table"
+                                 class="col-12 dc-table-small table table-hover table-striped table-scroll"></div>
+                            <div class="w-100"></div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                <div class="col mt-5">
+                    <div class="row">
+                        {% if include_version %}
+                            <div class="col dc-pie-cont mx-auto">
+                                <div class="row">
+                                    <div id="version-chart" class="col dc-pie"></div>
+                                    <div class="w-100"></div>
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        <div class="col dc-pie-cont mx-auto">
+                            <div class="row">
+                                <div id="address_type-chart" class="col dc-pie"></div>
+                                <div class="w-100"></div>
+                            </div>
+                        </div>
+
+                        {% if include_active %}
+                            <div class="col dc-pie-cont mx-auto">
+                                <div class="row">
+                                    <div id="is_active-chart" class="col dc-pie"></div>
+                                    <div class="w-100"></div>
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        {% if has_masternodes %}
+                            <div class="col dc-pie-cont mx-auto">
+                                <div class="row">
+                                    <div id="is_masternode-chart" class="col dc-pie"></div>
+                                    <div class="w-100"></div>
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+
+                <div class="w-100"></div>
+
+
+            </div>
+
+            <div class="row">
+                <div class="col-12 mx-auto m-3">
+                    <div id="dateSlider">
+                        <div align="center">
+                            Last Seen: <span id="sliderValueDate"></span>
+                            <div class="jq-slider" id="slider-range-date"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-12 mx-auto">
+                    <span class="col-sm-5">
+                        <button type="button" id="tablePageDown" class="arrow-btn"
+                                style="padding:4px;margin-bottom:10px;"><i class="i arrow left"></i>
+                        </button>
+                        <span id="pagination_counter">Page 1</span>
+                        <button type="button" id="tablePageUp" class="arrow-btn"
+                                style="padding:4px;margin-bottom:10px;"><i class="i arrow right"></i>
+                        </button>
+                    </span>
+                    <div id="scroll_table_cont" style="overflow: auto; max-width:95%;">
+                        <table class='dc-table table table-hover table-striped table-bordered' id="summary-table">
+                            <thead>
+                            <tr class='table-header' id="table-header">
+                                <!-- Programmatically insert table headers here -->
+                            </tr>
+                            </thead>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% if network %}
+                <div class="row">
+                    <div class="col-12 mx-auto" id="historyContainer">
+                        <h3 align="center">Historic Node Counts</h3>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+    </section>
+
+    <section>
+
+        <div class="row mx-auto">
+            <div class="col card border-primary mb-3 mx-auto" style="max-width:450px; padding: 0 0 0 0">
+                <div class="card-header">Node Checker{% if network %} -
+                    {{ network.replace("-", " ").title() }}{% endif %}</div>
+                <div class="card-body">
+                    <span>Check the status of a remote node:</span>
+                    <form class="form-inline mt-2" action="#">
+                        <input id="check_node_input" type="text" class="form-control"
+                               placeholder="{% if not network %}btc:{% endif %}127.0.0.1" autocomplete="off">
+                        <button id="check_node_submit" type="button" class="btn btn-primary">Check Node</button>
+                    </form>
+                </div>
+            </div>
+            <div class="w-100"></div>
+        </div>
+
+        <div class="row" id="check_node_result" style="display:none;">
+            <div class="col w-10"></div>
+            <div class="card border-primary mb-3">
+                <div class="card-header" id="check_node_data_header"></div>
+                <div class="card-body">
+                    <div id="check_node_data_r1"></div>
+                    <div id="check_node_data_r2"></div>
+                    <div id="check_node_data_r3"></div>
+                </div>
+            </div>
+            <div class="col w-10"></div>
+        </div>
+
+
+    </section>
+
+    <section>
+        <div class="row mt-5">
+            <div class="col" align="center">
+                <h3>Download</h3>
+                By Node: <a href="/static/data{% if network %}_{{ network }}{% endif %}.csv">CSV</a>,
+                <a href="/static/data{% if network %}_{{ network }}{% endif %}.json">JSON</a>,
+                <a href="/static/data{% if network %}_{{ network }}{% endif %}.txt">TXT</a><br>
+                Unique Addresses: <a href="/static/data{% if network %}_{{ network }}{% endif %}_unique.csv">CSV</a>,
+                <a href="/static/data{% if network %}_{{ network }}{% endif %}_unique.json">JSON</a>,
+                <a href="/static/data{% if network %}_{{ network }}{% endif %}_unique.txt">TXT</a>
+            </div>
+        </div>
+    </section>
+
+    {% include 'footer.html' %}
+
+    <div id="mouseover-tooltip"></div>
+
+
+    <script>
+        var colors = d3.scaleLinear()
+            .domain([0, 4, 8])
+            .range(['#0061B5', '#7fcdbb', '#edf8b1'])
+            .interpolate(d3.interpolateHcl);
+
+        var colarray = [];
+        for (let i = 0; i < 8; i++) {
+            colarray.push(colors(i));
+        }
+        dc.config.defaultColors(colarray);
+
+        const currentMousePos = {x: -1, y: -1};
+        const mouseoverElem = $('#mouseover-tooltip');
+        $(document).mousemove(function (event) {
+            currentMousePos.x = event.pageX;
+            currentMousePos.y = event.pageY;
+            mouseoverElem.css({
+                left: currentMousePos.x + 15,
+                top: currentMousePos.y - mouseoverElem.height() - 15
+            });
+        });
+
+        function resultHandler(resp) {
+            resp = JSON.parse(resp).result;
+            $("#check_node_data_r2").removeClass("loading_spinner").removeClass("spinner_small");
+            if (resp.hasOwnProperty("network")) {
+                $("#check_node_data_header").html(resp.network + " - " + resp.address + ":" + resp.port)
+            }
+            if (resp.hasOwnProperty("error")) {
+
+                $("#check_node_data_r2").html("Error: " + resp.error).show();
+
+            } else {
+                $("#check_node_data_r1").html("User Agent: " + resp.user_agent).show();
+                $("#check_node_data_r2").html("Version: " + resp.version + " - Height: " + resp.height).show();
+                $("#check_node_data_r3").html(resp.city + ", " + resp.country + " - " + resp.aso).show();
+            }
+        }
+
+        $("#check_node_submit").click(function () {
+            const inp = $("#check_node_input").val();
+
+            if (inp !== "") {
+                {% if not network %}
+                    if ((inp.match(/:/g) || []).length < 1) {
+                        return;
+                    }
+                {% endif %}
+                $.post("/api/check_node", {"node": {% if network %}"{{ network }}:" + {% endif %}inp}, resultHandler);
+                $("#check_node_data_r2").addClass("loading_spinner").addClass("spinner_small").html("").show();
+                $("#check_node_data_header").html("");
+                $("#check_node_data_r1").html("").hide();
+                $("#check_node_data_r3").html("").hide();
+                $("#check_node_result").show();
+            }
+        });
+    </script>
+
+    <script type="text/javascript">
+        const numberFormat = d3.format(".2f");
+
+        $.getJSON("/api/gzip_file/data{% if network %}_{{ network }}{% endif %}.json", function (dat) {
+                let iso_countries;
+                $.getJSON("/static/flags/iso_countries.json", function (dat) {
+                    iso_countries = dat;
+                });
+
+                {% if include_client %}
+                    function min_over_zero(x, y, z) {
+                        let minim = 999;
+                        if (x !== -1) {
+                            minim = Math.min(minim, x);
+                        }
+                        if (y !== -1) {
+                            minim = Math.min(minim, y);
+                        }
+                        if (z !== -1) {
+                            minim = Math.min(minim, z);
+                        }
+                        return minim;
+                    }
+                    dat.data.forEach(function (d) {
+                        d.client = d.user_agent.substring(1, min_over_zero(d.user_agent.indexOf(":", 2),
+                            d.user_agent.indexOf("(", 2), d.user_agent.indexOf("/", 2)));
+                    });
+                {% endif %}
+
+                const ndx = crossfilter(dat.data);
+                {% if include_network %}
+                    <!-- network -->
+                    const networkDim = ndx.dimension(function (d) {
+                        return d.network;
+                    });
+                    const countByNetwork = networkDim.group().reduceCount(function (d) {
+                        return d.network;
+                    });
+                    const networkChart = dc.pieChart("#network-chart");
+                    networkChart.width(200).height(200).dimension(networkDim).group(countByNetwork)
+                        .useViewBoxResizing(true).externalRadiusPadding(30).cap(10).label(function (d) {
+                    });
+
+                    const networkTable = dc.dataTable("#network-table");
+                    networkTable
+                        .dimension(countByNetwork)
+                        .group(function (d) {
+                            return 0;
+                        })
+                        .showGroups(false)
+                        .columns([
+                            {
+                                label: "", format: function (d) {
+                                    return "<span class=\"color-box\" style=\"background-color: " + networkChart.getColor(d) + ";\"></span>";
+                                }
+                            },
+                            {
+                                label: "Network", format: function (d) {
+                                    return d.key;
+                                }
+                            },
+                            {
+                                label: "#", format: function (d) {
+                                    return d.value;
+                                }
+                            },
+                            {
+                                label: "(%)", format: function (d) {
+                                    let total = 0;
+                                    countByNetwork.all().forEach(function (d) {
+                                        total += d.value;
+                                    });
+                                    return Math.round(1000.0 * d.value / total) / 10.0;
+                                }
+                            },
+
+                        ])
+                        .sortBy(function (d) {
+                            return d.value;
+                        })
+                        .order(d3.descending)
+                        .size(Infinity)
+                {% endif %}
+
+                {% if include_client %}
+                    <!-- client -->
+                    const clientDim = ndx.dimension(function (d) {
+                        return d.client;
+                    });
+                    const countByClient = clientDim.group().reduceCount(function (d) {
+                        return d.client;
+                    });
+                    const clientChart = dc.pieChart("#client-chart");
+                    clientChart.width(200).height(200).dimension(clientDim).group(countByClient)
+                        .useViewBoxResizing(true).externalRadiusPadding(30).cap(20).label(function (d) {
+                    });
+
+                    const clientTable = dc.dataTable("#client-table");
+                    clientTable
+                        .dimension(countByClient)
+                        .group(function (d) {
+                            return 0;
+                        })
+                        .showGroups(false)
+                        .columns([
+                            {
+                                label: "", format: function (d) {
+                                    return "<span class=\"color-box\" style=\"background-color: " + clientChart.getColor(d) + ";\"></span>";
+                                }
+                            },
+                            {
+                                label: "Client", format: function (d) {
+                                    return d.key;
+                                }
+                            },
+                            {
+                                label: "#", format: function (d) {
+                                    return d.value;
+                                }
+                            },
+                            {
+                                label: "(%)", format: function (d) {
+                                    let total = 0;
+                                    countByClient.all().forEach(function (d) {
+                                        total += d.value;
+                                    });
+                                    return Math.round(1000.0 * d.value / total) / 10.0;
+                                }
+                            },
+
+                        ])
+                        .sortBy(function (d) {
+                            return d.value;
+                        })
+                        .order(d3.descending)
+                        .size(Infinity)
+                {% endif %}
+
+                {% if include_user_agent %}
+                    <!-- user agent -->
+                    const user_agentDim = ndx.dimension(function (d) {
+                        return d.user_agent;
+                    });
+                    const countByuser_agent = user_agentDim.group().reduceCount(function (d) {
+                        return d.user_agent;
+                    });
+
+                    const user_agentChart = dc.pieChart("#user_agent-chart");
+
+                    user_agentChart.width(200).height(200).dimension(user_agentDim).group(countByuser_agent)
+                        .useViewBoxResizing(true).externalRadiusPadding(30).cap(30).label(function (d) {
+                    });
+
+                    const user_agentTable = dc.dataTable("#user_agent-table");
+
+                    user_agentTable
+                        .dimension(countByuser_agent)
+                        .group(function (d) {
+                            return 0;
+                        })
+                        .showGroups(false)
+                        .columns([
+                            {
+                                label: "", format: function (d) {
+                                    return "<span class=\"color-box\" style=\"background-color: " + user_agentChart.getColor(d) + ";\"></span>";
+                                }
+                            },
+                            {
+                                label: "Version", format: function (d) {
+                                    return d.key.substring(0, 30);
+                                }
+                            },
+                            {
+                                label: "#", format: function (d) {
+                                    return d.value;
+                                }
+                            },
+                            {
+                                label: "(%)", format: function (d) {
+                                    let total = 0;
+                                    countByuser_agent.all().forEach(function (d) {
+                                        total += d.value;
+                                    });
+                                    return Math.round(1000.0 * d.value / total) / 10.0;
+                                }
+                            },
+
+                        ])
+                        .sortBy(function (d) {
+                            return d.value;
+                        })
+                        .order(d3.descending)
+                        .size(Infinity);
+                {% endif %}
+
+                {% if include_version %}
+                    <!-- version -->
+                    const versionDim = ndx.dimension(function (d) {
+                        return d.version;
+                    });
+                    const countByversion = versionDim.group().reduceCount(function (d) {
+                        return d.version;
+                    });
+                    const versionChart = dc.pieChart("#version-chart");
+                    versionChart.width(200).height(200).dimension(versionDim).group(countByversion)
+                        .useViewBoxResizing(true).renderTitle(false).minAngleForLabel(0.15).externalLabels(20).externalRadiusPadding(45)
+                        .cap(20);
+                {% endif %}
+
+                <!-- address_type -->
+                const address_typeDim = ndx.dimension(function (d) {
+                    return d.address_type;
+                });
+                const countByaddress_type = address_typeDim.group().reduceCount(function (d) {
+                    return d.address_type;
+                });
+                const address_typeChart = dc.pieChart("#address_type-chart");
+                address_typeChart.width(200).height(200).dimension(address_typeDim).group(countByaddress_type)
+                    .useViewBoxResizing(true).renderTitle(false).minAngleForLabel(0.15).externalLabels(20)
+                    .externalRadiusPadding(45).cap(10);
+
+                {% if include_active %}
+                    <!-- is_active -->
+                    const is_activeDim = ndx.dimension(function (d) {
+                        return d.is_active;
+                    });
+                    const countByis_active = is_activeDim.group().reduceCount(function (d) {
+                        return d.is_active;
+                    });
+                    const is_activeChart = dc.pieChart("#is_active-chart");
+                    is_activeChart.width(200).height(200).dimension(is_activeDim).group(countByis_active)
+                        .useViewBoxResizing(true).minAngleForLabel(0.15).externalLabels(20).externalRadiusPadding(45)
+                        .renderTitle(false).cap(10).label(function (d) {
+                        if (d.key) {
+                            return "Active"
+                        }
+                        return "Inactive";
+                    });
+                {% endif %}
+
+                {% if has_masternodes %}
+                    <!-- is_masternode -->
+                    const is_masternodeDim = ndx.dimension(function (d) {
+                        return d.is_masternode;
+                    });
+                    const countByis_masternode = is_masternodeDim.group().reduceCount(function (d) {
+                        return d.is_masternode;
+                    });
+                    const is_masternodeChart = dc.pieChart("#is_masternode-chart");
+                    is_masternodeChart.width(200).height(200).dimension(is_masternodeDim).group(countByis_masternode)
+                        .useViewBoxResizing(true).minAngleForLabel(0.15).externalLabels(20).externalRadiusPadding(45)
+                        .renderTitle(false).cap(10).label(function (d) {
+                        if (d.key) {
+                            return "Masternode"
+                        }
+                        return "Full Node";
+                    });
+                {% endif %}
+
+                <!-- aso -->
+                const asoDim = ndx.dimension(function (d) {
+                    return d.aso;
+                });
+                const countByAso = asoDim.group().reduceCount(function (d) {
+                    return d.aso;
+                });
+                const asoChart = dc.pieChart("#aso-chart");
+                asoChart.width(200).height(200).dimension(asoDim).group(countByAso)
+                    .useViewBoxResizing(true).externalRadiusPadding(20).cap(60).label(function (d) {
+                });
+
+                const asoTable = dc.dataTable("#aso-table");
+                asoTable
+                    .dimension(countByAso)
+                    .group(function (d) {
+                        return 0;
+                    })
+                    .showGroups(false)
+                    .columns([
+                        {
+                            label: "", format: function (d) {
+                                return "<span class=\"color-box\" style=\"background-color: " + asoChart.getColor(d) + ";\"></span>";
+                            }
+                        },
+                        {
+                            label: "ISP", format: function (d) {
+                                return d.key;
+                            }
+                        },
+                        {
+                            label: "#", format: function (d) {
+                                return d.value;
+                            }
+                        },
+                        {
+                            label: "(%)", format: function (d) {
+                                let total = 0;
+                                countByAso.all().forEach(function (d) {
+                                    total += d.value;
+                                });
+                                return Math.round(1000.0 * d.value / total) / 10.0;
+                            }
+                        },
+
+                    ])
+                    .sortBy(function (d) {
+                        return d.value;
+                    })
+                    .order(d3.descending)
+                    .size(Infinity);
+
+                <!-- map -->
+                const summaryTable = dc.dataTable("#summary-table");
+                const addresses = ndx.dimension(function (d) {
+                    return d.address;
+                });
+                const dummyAddress = addresses.top(1)[0];
+
+                function addFunc(p, v) {
+                    v.active = true;
+                    return v;
+                }
+
+                function removeFunc(p, v) {
+                    p.active = false;
+                    return p;
+                }
+
+                function initFunc(p, v) {
+                    return dummyAddress;
+                }
+
+                function remove_empty_bins(source_group) {
+                    function active(d) {
+                        return d.value.active;
+                    }
+
+                    return {
+                        all: function () {
+                            return source_group.all().filter(active);
+                        },
+                        top: function (n) {
+                            return source_group.top(Infinity)
+                                .filter(active)
+                                .slice(0, n);
+                        },
+                        bottom: function (n) {
+                            return source_group.top(Infinity)
+                                .filter(active)
+                                .slice(-n).reverse();
+                        }
+                    };
+                }
+
+                const addressGroup = addresses.group().reduce(addFunc, removeFunc, initFunc);
+                const current_timestamp = new Date() / 1000;
+
+                summaryTable
+                    .dimension(remove_empty_bins(addressGroup))
+                    .group(function (p) {
+                        return 0;
+                    })
+                    .showGroups(false)
+                    .columns([
+                        {% if not network %}
+                            {
+                                label: "Network", format: function (d) {
+                                    return d.value.network;
+                                }
+                            },
+                        {% endif %}
+                        {
+                            label: "Address", format: function (d) {
+                                return d.key + ":" + d.value.port;
+                            }
+                        },
+                        {% if include_user_agent %}
+                            {
+                                label: "User Agent", format: function (d) {
+                                    return d.value.user_agent.substring(0, 28);
+                                }
+                            },
+                        {% endif %}
+                        {% if include_version %}
+                            {
+                                label: "Version", format: function (d) {
+                                    return d.value.version
+                                }
+                            },
+                        {% endif %}
+                        {
+                            label: "Country", format: function (d) {
+                                if (d.value.country !== "") {
+                                    if (iso_countries.hasOwnProperty(d.value.country)){
+                                        return "<img src=\"/static/flags/blank.gif\" class=\"flag flag-" + iso_countries[d.value.country].toLowerCase() + "\" alt=\"" + d.value.country + "\"/>";
+                                    } else {
+                                        return d.value.country;
+                                    }
+                                } else {
+                                    return d.value.country;
+                                }
+
+                            }
+                        },
+                        {
+                            label: "Last<br>Seen", format: function (d) {
+                                let age_min = (current_timestamp - d.value.last_seen) / 60;
+                                if (age_min > 60) {
+                                    return Math.round(age_min / 60 * 10) / 10 + "h."
+                                }
+                                return Math.round(age_min * 10) / 10 + "m."
+                            }
+                        },
+                        {% if network %}
+                            {
+                                label: "Last<br>Height", format: function (d) {
+                                    return d.value.last_height
+                                }
+                            },
+                        {% endif %}
+                        {
+                            label: "Uptime<br>(8h)", format: function (d) {
+                                return d3.format(".0%")(d.value['8h']);
+                            }
+                        },
+                        {
+                            label: "Uptime<br>(7 day)", format: function (d) {
+                                return d3.format(".0%")(d.value['7d']);
+                            }
+                        },
+                        {
+                            label: "Uptime<br>(30 day)", format: function (d) {
+                                return d3.format(".0%")(d.value['30d']);
+                            }
+                        }
+                    ])
+                    .sortBy(function (d) {
+                        return d.value['30d'];
+                    })
+                    .order(d3.descending)
+                    .size(Infinity)
+                    .beginSlice(0)
+                    .endSlice(25);
+
+                const formatDate = d3.timeFormat("%B %d, %I %p");
+                const dateDimension = ndx.dimension(function (d) {
+                    return d.last_seen;
+                });
+
+                $(function () {
+                    $("#slider-range-date").slider({
+                        range: true,
+                        min: {{ age_min }},
+                        max: {{ age_max }},
+                        values: [0, {{ age_max }}],
+                        change: function (event, ui) {
+                            $("#sliderValueDate").html(formatDate(ui.values[0]) + " to " + formatDate(ui.values[1]));
+                            dateDimension.filter(function (d) {
+                                return d >= ui.values[0] / 1000 && d <= ui.values[1] / 1000;
+                            });
+                            dc.redrawAll();
+                            update_tables();
+                            update_counters();
+                        }
+                    });
+                    $("#sliderValueDate").html(formatDate({{ age_max }} -1000 * 60 * 60 * 24) + " to " + formatDate({{ age_max }}));
+                });
+
+                const mapChart = dc.geoChoroplethChart("#world-chart");
+                const countryDim = ndx.dimension(function (d) {
+                    return d.country;
+                });
+                const countByCountry = countryDim.group().reduceCount(function (d) {
+                    return d.country;
+                });
+                const countryDimAlt = ndx.dimension(function (d) {
+                    return d.country;
+                });
+                const countByCountryAlt = countryDimAlt.group().reduceCount(function (d) {
+                    return d.country;
+                });
+
+                const worldTable = dc.dataTable("#world-table");
+                worldTable
+                    .dimension(countByCountry)
+                    .group(function (d) {
+                        return 0;
+                    })
+                    .showGroups(false)
+                    .columns([
+                        {
+                            label: "", format: function (d) {
+                                if (d.key === "") {
+                                    return "";
+                                }
+                                if (iso_countries.hasOwnProperty(d.key)) {
+                                    return "<img src=\"/static/flags/blank.gif\" class=\"flag flag-" + iso_countries[d.key].toLowerCase() + "\" alt=\"" + d.key + "\"/>";
+                                }
+                            }
+                        },
+                        {
+                            label: "Country", format: function (d) {
+                                if (d.key === "") {
+                                    return "Unknown";
+                                }
+                                return d.key;
+                            }
+                        },
+                        {
+                            label: "#", format: function (d) {
+                                return d.value;
+                            }
+                        },
+                        {
+                            label: "(%)", format: function (d) {
+                                let total = 0;
+                                countByCountry.all().forEach(function (d) {
+                                    total += d.value;
+                                });
+                                return Math.round(1000.0 * d.value / total) / 10.0;
+                            }
+                        },
+
+                    ])
+                    .sortBy(function (d) {
+                        return d.value;
+                    })
+                    .order(d3.descending)
+                    .size(Infinity);
+
+                let current_scale = "undefined";
+                let mapWidth = 500;
+                let mapHeight = 500;
+                const projection = d3.geoMercator().rotate([-10, 0]);
+
+                function resize_map() {
+                    if ($(window).width() < 400) {
+                        if (current_scale !== "MIN") {
+                            current_scale = "MIN";
+                            projection.scale(40).center([359, -80]).translate([400, 250]);
+                            mapWidth = 280;
+                            mapHeight = 230;
+                            mapChart.width(mapWidth).height(mapHeight).projection(projection).redraw();
+                        }
+                    } else if ($(window).width() < 500) {
+                        if (current_scale !== "500") {
+                            current_scale = "500";
+                            projection.scale(50).center([340, -70]).translate([480, 250]);
+                            mapWidth = 360;
+                            mapHeight = 260;
+                            mapChart.width(mapWidth).height(mapHeight).projection(projection).redraw();
+                        }
+                    } else if ($(window).width() < 640) {
+                        if (current_scale !== "640") {
+                            current_scale = "640";
+                            projection.scale(70).center([200, 0]).translate([480, 250]);
+                            mapWidth = 480;
+                            mapHeight = 400;
+                            mapChart.width(mapWidth).height(mapHeight).projection(projection).redraw();
+                        }
+                    } else if ($(window).width() < 900) {
+                        if (current_scale !== "900") {
+                            current_scale = "900";
+                            projection.scale(90).center([100, 20]).translate([480, 250]);
+                            mapWidth = 600;
+                            mapHeight = 460;
+                            mapChart.width(mapWidth).height(mapHeight).projection(projection).redraw();
+                        }
+                    } else {
+                        if (current_scale !== "MAX") {
+                            current_scale = "MAX";
+                            mapWidth = 680;
+                            mapHeight = 500;
+                            projection.scale(100).center([90, 35]).translate([480, 250]);
+                            mapChart.width(mapWidth).height(mapHeight).projection(projection).redraw();
+                        }
+                    }
+                }
+
+                $(window).resize(function () {
+                    resize_map();
+                });
+
+                resize_map();
+
+                $.getJSON("/api/gzip_file/custom.geo.json", function (map) {
+                    mapChart
+                        .dimension(countryDim)
+                        .group(countByCountry)
+                        .overlayGeoJson(map.features, "country", function (d) {
+                            return d.properties.name;
+                        })
+                        {#.useViewBoxResizing(true)#}
+                        .renderTitle(false)
+                        .colors(d3.scaleQuantize().range(["#E2F2FF", "#C4E4FF", "#9ED2FF", "#81C5FF", "#6BBAFF", "#51AEFF", "#36A2FF",
+                            "#1E96FF", "#0089FF", "#0061B5"]))
+                        .colorDomain([0, 5])
+                        .colorCalculator(function (d) {
+                            return d ? mapChart.colors()(d) : '#FFFFFF';
+                        })
+                        .valueAccessor(function (kv) {
+                            return kv.value;
+                        })
+                        .on("preRender", function (chart) {
+                            chart.colorDomain(d3.extent(chart.data(), chart.valueAccessor()));
+                        }).on("preRedraw", function (chart) {
+                        chart.colorDomain(d3.extent(chart.data(), chart.valueAccessor()));
+                    });
+
+
+                    dc.renderAll();
+
+                    {#svg = $("#world-chart :first").attr("preserveAspectRatio", "xLeftYTop meet")#}
+                    {#svg.addClass("svg-content-responsive");#}
+                    {#svg.attr("viewBox", "0 0 800 500");#}
+
+                    {#window.onresize = function(d) {#}
+                    {#    var newWidth = document.getElementById('map-chart-container').offsetWidth;#}
+                    {#    var newScale = newWidth/800;#}
+                    {#    projection.scale(newScale * 100);#}
+                    {##}
+                    {#    mapChart.width(newWidth).projection(projection);#}
+                    {#    var w = d3.select("map-chart-container").clientWidth;#}
+                    {#    console.log("resized", w);#}
+                    {#    mapChart.render();#}
+
+
+                });
+
+                let tableSliceStart = 0;
+                const tableSliceSize = 25;
+                let totalPages = 0;
+                let currentPage = 0;
+
+                function update_tables() {
+                    totalPages = Math.ceil(summaryTable.dimension().top(Number.POSITIVE_INFINITY).length / tableSliceSize);
+                    currentPage = (tableSliceStart / tableSliceSize + 1);
+                    summaryTable.beginSlice(tableSliceStart);
+                    summaryTable.endSlice(tableSliceStart + tableSliceSize);
+                    summaryTable.redraw();
+                    $("#pagination_counter").text("Page " + currentPage + " of " + totalPages);
+                }
+
+                const countByAddress = addresses.group().reduceCount(function (d) {
+                    return d.address;
+                });
+
+                function update_counters() {
+                    let nodeCount = 0;
+                    let countryCount = 0;
+                    countByCountryAlt.all().forEach(function (d) {
+                        if (d.value > 0) {
+                            nodeCount += d.value;
+                            if (d.key !== "") {
+                                countryCount += 1;
+                            }
+                        }
+                    });
+
+                    $("#total_nodes_counter").html(nodeCount.toString());
+                    $("#total_countries_counter").html(countryCount.toString());
+
+                    let serverCount = 0;
+                    countByAddress.all().forEach(function (d) {
+                        if (d.value > 0) {
+                            if (d.key !== "") {
+                                serverCount += 1;
+                            }
+                        }
+                    });
+
+                    $("#total_servers_counter").html(serverCount.toString());
+                }
+
+                let currentSort = "Uptime (30 day)";
+                let currentDir = "desc";
+
+
+                function tableHeaderCallback(obj) {
+                    const label = obj[0].innerHTML;
+                    if (label === currentSort) {
+                        currentDir = (currentDir === "desc") ? "asc" : "desc";
+                    } else {
+                        currentDir = "desc";
+                    }
+                    currentSort = label;
+
+                    if (currentDir === "desc") {
+                        summaryTable.order(d3.descending);
+                    } else {
+                        summaryTable.order(d3.ascending);
+                    }
+
+
+                    if (label === "Network") {
+                        summaryTable.sortBy(function (d) {
+                            return d.value.network;
+                        });
+                    } else if (label === "Address") {
+                        summaryTable.sortBy(function (d) {
+                            return d.key + ":" + d.value.port;
+                        });
+                    } else if (label === "User Agent") {
+                        summaryTable.sortBy(function (d) {
+                            return d.value.user_agent;
+                        });
+                    } else if (label === "Version") {
+                        summaryTable.sortBy(function (d) {
+                            return d.value.version;
+                        });
+                    } else if (label === "Country") {
+                        summaryTable.sortBy(function (d) {
+                            return d.value.country;
+                        });
+                    } else if (label === "Last<br>Seen") {
+                        summaryTable.sortBy(function (d) {
+                            return d.value.last_seen;
+                        });
+                    } else if (label === "Last<br>Height") {
+                        summaryTable.sortBy(function (d) {
+                            return d.value.last_height;
+                        });
+                    } else if (label === "Uptime<br>(8h)") {
+                        summaryTable.sortBy(function (d) {
+                            return d.value['8h']
+                        });
+                    } else if (label === "Uptime<br>(7 day)") {
+                        summaryTable.sortBy(function (d) {
+                            return d.value['7d']
+                        });
+                    } else if (label === "Uptime<br>(30 day)") {
+                        summaryTable.sortBy(function (d) {
+                            return d.value['30d']
+                        });
+                    }
+
+                    summaryTable.redrawGroup()
+                }
+
+                // Programmatically insert header labels for table
+                setTimeout(function (d) {
+                    $("#table-header > th").each(function () {
+                        $(this).on('click', function () {
+                            tableHeaderCallback($(this));
+                        });
+                    });
+
+                    dc.chartRegistry.list().forEach(function (chart) {
+                        chart.on('filtered', function () {
+                            tableSliceStart = 0;
+                            update_tables();
+                            update_counters();
+                        }).on('renderlet', function (chart) {
+                            chart.selectAll('rect,g.pie-slice,circle.dot,g.rect,g.row,g.country').on('mouseover', function (d) {
+                                let tt;
+                                if (d.hasOwnProperty("data")) {
+                                    if (d.data.key === true || d.data.key === false) {
+                                        tt = d.data.value + " Nodes";
+                                    } else {
+                                        tt = d.data.key + "<br>" + d.data.value + " Nodes";
+                                    }
+                                } else if (d.hasOwnProperty("properties")) {
+                                    let count = countByCountry.all().filter(function (item) {
+                                        return item.key === d.properties.name;
+                                    })[0];
+                                    tt = d.properties.name + "<br>" + (count == null ? "0" : count.value) + " Nodes";
+                                } else {
+                                    if (d.key === true || d.key === false) {
+                                        tt = d.value + " Nodes";
+                                    } else {
+                                        tt = d.key + "<br>" + d.value + " Nodes";
+                                    }
+                                }
+                                mouseoverElem.html(tt).css({visibility: 'visible'});
+                            }).on('mouseout', function (d) {
+                                mouseoverElem.html('').css({visibility: 'hidden'});
+                            });
+                        });
+                    });
+
+                    $("#tablePageUp").click(function () {
+                        if (currentPage < totalPages) {
+                            tableSliceStart = tableSliceStart + tableSliceSize;
+                            update_tables();
+                        }
+                    });
+
+                    $("#tablePageDown").click(function () {
+                        if (tableSliceStart > 0) {
+                            tableSliceStart -= tableSliceSize;
+                            update_tables();
+                        }
+                    });
+
+                    update_tables();
+                    update_counters();
+
+                    dateDimension.filter(function (d) {
+                        return d >= {{ max_age }} -1000 * 60 * 60 * 24 && d <= 0.001 * {{ age_max }};
+                    });
+
+                    $("#slider-range-date").slider('values', 0, {{ age_max }} -1000 * 60 * 60 * 24 - 1);
+                    $("#loading_container").hide();
+                    $("#content_main").show();
+
+
+                }, 2000);
+
+
+            }
+        );
+
+        {% if network %}
+            // Get the data for the historical chart
+            d3.json("/api/gzip_file/history_{{ network }}.json").then(function (d1) {
+                // format the data
+                let data = [];
+                d1.forEach(function (d) {
+                    if (d.node_count !== 0) {
+                        d.timestamp = d.timestamp * 1000;
+                        d.node_count = +d.node_count;
+                        data.push(d);
+                    }
+                });
+
+                // set the dimensions and margins of the graph
+                var margin = {top: 20, right: 20, bottom: 30, left: 50},
+                    width = 700 - margin.left - margin.right,
+                    height = 385 - margin.top - margin.bottom;
+
+                // set the ranges
+                var x = d3.scaleTime().range([0, width]);
+                var y = d3.scaleLinear().range([height, 0]);
+
+                // define the line
+                var valueline = d3.line()
+                    .x(function (d) {
+                        return x(d.timestamp);
+                    })
+                    .y(function (d) {
+                        return y(d.node_count);
+                    });
+
+                var svg = d3.select("#historyContainer")
+                    .append("div")
+                    .classed("svg-container", true) //container class to make it responsive
+                    .append("svg")
+                    //responsive SVG needs these 2 attributes and no width and height attr
+                    .attr("preserveAspectRatio", "xMidYMid meet")
+                    .attr("viewBox", "0 0 700 385")
+                    //class to make it responsive
+                    .classed("svg-content-responsive", true)
+
+                    // .attr("width", width + margin.left + margin.right)
+                    // .attr("height", height + margin.top + margin.bottom)
+                    .append("g")
+                    .attr("transform",
+                        "translate(" + margin.left + "," + margin.top + ")");
+
+                // Scale the range of the data
+                x.domain(d3.extent(data, function (d) {
+                    return d.timestamp;
+                }));
+                const extentsY = d3.extent(data, function (d) {
+                    return d.node_count;
+                });
+                y.domain([Math.max(0, extentsY[0] - (extentsY[1] - extentsY[0]) / 2), extentsY[1] + (extentsY[1] - extentsY[0]) / 2]);
+
+                // Add the valueline path.
+                svg.append("path")
+                    .data([data])
+                    .attr("class", "line")
+                    .attr("d", valueline);
+
+                // Add the X Axis
+                svg.append("g")
+                    .attr("transform", "translate(0," + height + ")")
+                    .call(d3.axisBottom(x));
+
+                // Add the Y Axis
+                svg.append("g")
+                    .call(d3.axisLeft(y));
+
+            });
+        {% endif %}
+
+    </script>
+
+
+{% endblock %}

@@ -1,0 +1,244 @@
+### Anything added to crawler_user_config.yml will overwrite these settings
+
+# Max concurrent threadpool workers - setting this too high may cause connections to be dropped
+threads: 800
+
+# Max tasks in queue - higher will minimize database IO at cost of increased memory usage
+max_queue: 20000
+
+# Minimum time between node visitations (minutes)
+crawl_interval: 15
+
+# Proportion of connections which are followed up with a getaddr call. (0.0-1.0)
+# After initial seeding it isn't necessary for this to be very high to discover all new nodes
+# When --seed parameter is passed this is ignored
+getaddr_prop: 0.2
+
+# How much the block height has to differ from the median to be marked inactive
+# Dash and Litecoin have faster block times so this is set slightly higher
+inactive_threshold:
+  default: 12
+  dash: 48
+  litecoin: 48
+
+# Attempt to establish connection with IPv6 nodes
+ipv6: True
+
+# Attempt to establish connection with .onion nodes
+onion: True
+
+# Tor proxy is required to connect to .onion address
+tor_proxy: 127.0.0.1:9050
+
+# order with which to process the networks - bch should be processed first, as all bch nodes need to be mapped so
+# they are not pinged while crawling another network. Connections to BCH nodes with the wrong network-magic will
+# trigger a 24 hour IP ban.
+crawl_order:
+  - bitcoin-cash
+  - dash
+  - litecoin
+  - bitcoin
+
+# Locks database table and updates Last_Checked BEFORE crawling nodes
+# Performance overhead, but necessary if multiple processes are crawling concurrently using the same database
+database_concurrency: False
+
+# Socket timeout (seconds)
+socket_timeout: 20
+
+# Retries
+retries: 1
+
+# Retry only nodes seen in past X hours
+retry_threshold: 48
+
+# Used during connection handshake
+user_agent: /open-nodes:0.1/
+source_address: 0.0.0.0
+
+# How many days to continue checking a node that has not yet been seen
+min_pruning_age: 2
+
+# How many days to continue checking a node that has previously been seen
+max_pruning_age: 0
+
+# If a seen node has been pruned from the database due to max_pruning_age, remove its visitation history as well
+prune_visitations: False
+
+# Active nodes are defined as nodes within +/- [inactive_threshold] of the median block height.
+# If false inactive nodes will not be reported in the dumped files
+export_inactive_nodes: True
+
+# Excluded user agents - regex (see https://docs.python.org/3/library/re.html)
+excluded_user_agents:
+  - /monoeci*
+  - /binarium*
+  - /qyno*
+  - /monaco*
+  - /digitalcoin*
+  - /flashcoin*
+  - /watertechnology*
+  - /worldcoin*
+  - /feathercoin*
+  - /cryptocoin*
+  - /sollida*
+
+# Lookup whether a node is a Dash masternode or not
+get_dash_masternodes: True
+
+# dash-masternodes-api-endpoint - used as a fallback if local node is not running
+# GET/POST request should return a json array of all active dash masternodes
+# e.g. https://running-opennodes-webserver.com/api/get_dash_masternodes
+dash_masternodes_api: None
+
+# dash-cli executable directory
+dash_cli_path: /usr/local/bin/dashcore-0.12.3/bin/
+
+# historical data reporting interval (hours)
+historic_interval: 4
+
+# Protocol info for crawled networks
+networks:
+  bitcoin:
+    services: 0
+    magic_number: f9beb4d9
+    port: 8333
+    protocol_version: 70001
+    min_protocol_version: 70001
+    dns_seeds:
+      - dnsseed.bitcoin.dashjr.org
+      - dnsseed.bluematt.me
+      - seed.bitcoin.jonasschnelli.ch
+      - seed.bitcoin.sipa.be
+      - seed.bitcoinstats.com
+      - seed.btc.petertodd.org
+      - seed.bitnodes.io
+      - seed.bitcoinabc.org
+      - seed-abc.bitcoinforks.org
+      - seed.bitcoinunlimited.info
+      - btccash-seeder.bitcoinunlimited.info
+      - seed.bitprim.org
+      - seed.deadalnix.me
+      - seeder.criptolayer.net
+    address_seeds:
+      - wioaxcgen3qvoqbf.onion
+      - hpquscklwzoiw7qv.onion
+      - 2zfhqfr4buzvrl5y.onion
+      - wgjotdhmpcj2kyq2.onion
+      - l4xfmcziytzeehcz.onion
+      - 36xxwca2o6gz2h2b.onion
+      - 7ejgnxi5z4w6tcgc.onion
+      - rlxhnlonhjiyzhjb.onion
+      - 62au2pzqah7cnrrw.onion
+      - 5difox54jm5hplrw.onion
+      - jwplkr5q3fivotmz.onion
+      - ndndword5lpb7eex.onion
+  dash:
+    services: 0
+    magic_number: bf0c6bbd
+    port: 9999
+    protocol_version: 70208
+    min_protocol_version: 70001
+    dns_seeds:
+      - dnsseed.darkcoin.io
+      - dnsseed.dashdot.io
+      - dnsseed.masternode.io
+      - dnsseed.dashpay.io
+      - dnsseed.dash.org
+    address_seeds:
+      - 128.199.62.168
+      - 31.220.7.131
+      - 89.38.144.71
+      - 188.166.9.179
+      - 45.32.114.160
+      - 37.59.247.129
+      - 149.56.66.236
+      - 159.65.84.39
+      - 185.158.152.60
+      - 45.32.20.140
+      - 52.79.197.66
+      - 51.15.88.43
+  litecoin:
+    services: 0
+    magic_number: fbc0b6db
+    port: 9333
+    protocol_version: 70003
+    min_protocol_version: 70001
+    dns_seeds:
+    - dnsseed.litecointools.com
+    - dnsseed.litecoinpool.org
+    - dnsseed.ltc.xurious.com
+    - dnsseed.koin-project.com
+    - seed-a.litecoin.loshan.co.uk
+    - dnsseed.thrasher.io
+    address_seeds:
+    - phrj27hskw3gq4b5.onion
+    - 2oqq4rydtti3xq4n.onion
+    - 4xjze2q2ztn6l4ce.onion
+    - 5zkvemmfa7ylr2qs.onion
+    - mqgmba4o453jwdjd.onion
+    - czahaqs6fhwr3jmw.onion
+  bitcoin-cash:
+    services: 0
+    magic_number: e3e1f3e8
+    port: 8333
+    protocol_version: 70015
+    min_protocol_version: 70001
+    dns_seeds:
+    - seed.bitcoinabc.org
+    - seed-abc.bitcoinforks.org
+    - seed.bitcoinunlimited.info
+    - btccash-seeder.bitcoinunlimited.info
+    - seed.bitprim.org
+    - seed.deadalnix.me
+    - seeder.criptolayer.net
+    address_seeds:
+    - li2mrdnveswxiwpe.onion
+    - bchponzidlqjpsqp.onion
+    - kister7332my5jka.onion
+    - nld6rvbglzbbf7av.onion
+    - wxjlz4avds42d42o.onion
+    - wxh5kn2zjkcptpvo.onion
+    - zndv4khma6ikx7o3.onion
+    - kisternetg2pq7wx.onion
+
+exclude_ipv4_networks:
+  - 0.0.0.0/8
+  - 10.0.0.0/8
+  - 100.64.0.0/10
+  - 127.0.0.0/8
+  - 169.254.0.0/16
+  - 172.16.0.0/12
+  - 192.0.0.0/24
+  - 192.0.0.0/29
+  - 192.0.0.170/32
+  - 192.0.0.171/32
+  - 192.0.0.8/32
+  - 192.0.2.0/24
+  - 192.168.0.0/16
+  - 192.175.48.0/24
+  - 192.31.196.0/24
+  - 192.52.193.0/24
+  - 192.88.99.0/24
+  - 198.18.0.0/15
+  - 198.51.100.0/24
+  - 203.0.113.0/24
+  - 240.0.0.0/4
+  - 255.255.255.255/32
+
+# Set to 1 to receive all txs (unused)
+relay: 0
+
+# List of excluded ASNs
+exclude_asns: []
+
+# List of excluded IPv6 networks
+exclude_ipv6_networks: []
+
+# Bogons are addresses outside the range of valid ipv4 addresses
+exclude_ipv4_bogons: True
+
+# Use median percentile +/- N interquartile ranges in place of block height to determine activity
+inactive_use_iqr: False
+
+
