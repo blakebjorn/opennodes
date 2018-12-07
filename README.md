@@ -6,8 +6,8 @@ A flask web server is included to display the data.
 
 ### Usage
 ```
-# Install python virtual environment and npm
-apt install npm python3-pip python3-venv
+# Install python virtual environment
+apt install python3-pip python3-venv
 python3 -m venv venv
 source venv/bin/activate
 
@@ -15,9 +15,6 @@ source venv/bin/activate
 # psycopg2-binary is required for postgres support
 # uwsgi is required for nginx/apache deployment
 pip install -r requirements.txt
-
-# install .js packages for website
-cd static && npm install dc jquery jqueryui bootstrap && cd ..
 
 # setup geoip database
 cd geoip && ./update.sh && cd ..
