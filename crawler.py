@@ -43,9 +43,12 @@ from models import Node, NodeVisitation, Base, CrawlSummary
 from config import load_config, DefaultFlaskConfig
 
 try:
-    from flask_config import SQLALCHEMY_DATABASE_URI
+    from flask_user_config import SQLALCHEMY_DATABASE_URI
 except ImportError:
-    SQLALCHEMY_DATABASE_URI = DefaultFlaskConfig.SQLALCHEMY_DATABASE_URI
+    try:
+        from flask_config import SQLALCHEMY_DATABASE_URI
+    except ImportError:
+        SQLALCHEMY_DATABASE_URI = DefaultFlaskConfig.SQLALCHEMY_DATABASE_URI
 
 logging.basicConfig(level=logging.INFO)
 
@@ -721,7 +724,7 @@ def generate_historic_data(session):
         if session.query(CrawlSummary).filter(CrawlSummary.timestamp == interval_end).count() >= 1:
             interval_end += historic_interval
             continue
-        logging.info("Summarizing period starting with {}".format(start_date.isoformat()))
+        logging.info("Summarizing period starting with {}".format(interval_end - historic_interval))
 
         q = session.query(NodeVisitation.parent_id.label("id"),
                           case([(NodeVisitation.user_agent.ilike("% SV%"), 'bitcoin-sv')], else_=Node.network).label("network"),
