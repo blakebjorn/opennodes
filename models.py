@@ -167,9 +167,6 @@ class NodeVisitation(Base):
     __tablename__ = 'node_visitations'
 
     id = Column(Integer, primary_key=True)
-    network = Column(String(20), nullable=True)
-    address = Column(String(50), nullable=True)
-    port = Column(Integer, nullable=True)
     parent_id = Column(Integer)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow())
     success = Column(Boolean, default=False)

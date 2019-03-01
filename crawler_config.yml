@@ -12,7 +12,7 @@ crawl_interval: 15
 # Proportion of connections which are followed up with a getaddr call. (0.0-1.0)
 # After initial seeding it isn't necessary for this to be very high to discover all new nodes
 # When --seed parameter is passed this is ignored
-getaddr_prop: 0.2
+getaddr_prop: 0.15
 
 # How much the block height has to differ from the median to be marked inactive
 # Dash and Litecoin have faster block times so this is set slightly higher
@@ -82,6 +82,7 @@ excluded_user_agents:
   - /feathercoin*
   - /cryptocoin*
   - /sollida*
+  - /desire*
 
 # Lookup whether a node is a Dash masternode or not
 get_dash_masternodes: True
@@ -137,7 +138,7 @@ networks:
     services: 0
     magic_number: bf0c6bbd
     port: 9999
-    protocol_version: 70208
+    protocol_version: 70213
     min_protocol_version: 70001
     dns_seeds:
       - dnsseed.darkcoin.io

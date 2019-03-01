@@ -54,6 +54,12 @@ logging.basicConfig(level=logging.INFO)
 
 CONF = load_config()
 
+ASN = Reader("geoip/GeoLite2-ASN.mmdb")
+COUNTRY = Reader("geoip/GeoLite2-Country.mmdb")
+CITY = Reader("geoip/GeoLite2-City.mmdb")
+
+RENAMED_COUNTRIES = {"South Korea":"Republic of Korea"}
+
 def connect(network, address, port, to_services, network_data, user_agent=None, explicit_p2p=False, p2p_nodes=True,
             from_services=None, keepalive=False, attempt=1):
     now = datetime.datetime.utcnow()
@@ -159,14 +165,6 @@ def get_seeds(port, dns_seeds, address_seeds, default_services=0):
 
     return exportList
 
-
-def init_geoip():
-    asn = Reader("geoip/GeoLite2-ASN.mmdb")
-    country = Reader("geoip/GeoLite2-Country.mmdb")
-    city = Reader("geoip/GeoLite2-City.mmdb")
-    return country, city, asn
-
-
 def init_db():
     if "sqlite:/" in SQLALCHEMY_DATABASE_URI:
         engine = create_engine(SQLALCHEMY_DATABASE_URI, connect_args={'timeout': 15}, echo=False)
@@ -250,15 +248,19 @@ def calculate_pending_nodes(session, start_time):
     q = q.filter(or_(
         Node.first_checked == None,
         Node.last_checked == None,
-        # If it hasn't been seen before, check every 60m
+        # Assume 30m interval
+        # If it hasn't been seen before, check every 6h
         and_(Node.last_seen == None, Node.last_checked != None,
-             Node.last_checked < now - datetime.timedelta(minutes=CONF['crawl_interval'] * 24)),
-        # If it has been seen in the last 6 hours, check it every 10 minutes
+             Node.last_checked < now - datetime.timedelta(minutes=CONF['crawl_interval'] * 12)),
+        # If it has been seen in the last 6 hours, check it every 30 minutes
         and_(Node.last_seen != None, Node.last_seen > now - datetime.timedelta(hours=6),
              Node.last_checked < now - datetime.timedelta(minutes=CONF['crawl_interval'])),
-        # Otherwise every 60 min
+        # If it has been seen in the last 2 weeks, check it every 12 hours
+        and_(Node.last_seen != None, Node.last_seen > now - datetime.timedelta(hours=24 * 14),
+             Node.last_checked < now - datetime.timedelta(minutes=CONF['crawl_interval'] * 24)),
+        # Otherwise every day
         and_(Node.last_seen != None,
-             Node.last_checked < now - datetime.timedelta(minutes=CONF['crawl_interval'] * 6))
+             Node.last_checked < now - datetime.timedelta(minutes=CONF['crawl_interval'] * 48))
     )).filter(not_(and_(Node.last_checked != None, Node.last_checked > start_time)))
 
     if CONF['crawl_order']:
@@ -287,8 +289,7 @@ def calculate_pending_nodes(session, start_time):
     return q.all()
 
 
-def process_pending_nodes(node_addresses, node_processing_queue, recent_heights, thread_pool, session, ASN,
-                          COUNTRY, CITY, mnodes=None):
+def process_pending_nodes(node_addresses, node_processing_queue, recent_heights, thread_pool, session, mnodes=None):
     futures_dict = {}
 
     checked_nodes = 0
@@ -379,23 +380,11 @@ def process_pending_nodes(node_addresses, node_processing_queue, recent_heights,
                 node.last_height = result['height']
                 if node.first_seen is None:
                     node.first_seen = timestamp
+                    node.country, node.city, node.aso, node.asn = geocode_ip(node.address)
                 node.seen = True
 
                 seen_nodes += 1
                 recent_heights[result['network']].append(result['height'])
-                if not result['address'].endswith(".onion"):
-                    if node.asn is None or node.aso is None:
-                        try:
-                            node.aso = ASN.asn(node.address).autonomous_system_organization
-                            node.asn = ASN.asn(node.address).autonomous_system_number
-                        except AddressNotFoundError:
-                            pass
-                    if node.country is None or node.city is None:
-                        try:
-                            node.country = COUNTRY.country(node.address).country.name
-                            node.city = CITY.city(node.address).city.name
-                        except AddressNotFoundError:
-                            pass
 
             session.add(node)
 
@@ -505,8 +494,31 @@ def code_ip_type(inp):
     else:
         return "Unknown"
 
+def geocode_ip(address):
+    aso = None
+    asn = None
+    country = None
+    city = None
+    if not address.endswith(".onion"):
+        try:
+            aso = ASN.asn(address).autonomous_system_organization
+            asn = ASN.asn(address).autonomous_system_number
+        except AddressNotFoundError:
+            pass
+        try:
+            country = COUNTRY.country(address).country.name
+            country = RENAMED_COUNTRIES.get(country, country)
+            city = CITY.city(address).city.name
+        except AddressNotFoundError:
+            pass
+    return country, city, aso, asn
+
 
 def dump_summary(session):
+    ## Set updated countries
+    for n in session.query(Node).all():
+        n.country, n.city, n.aso, n.asn = geocode_ip(n.address, )
+
     ## Get and set dash masternodes
     if CONF['get_dash_masternodes']:
         mnodes = update_masternode_list()
@@ -596,7 +608,7 @@ def dump_summary(session):
         CONF['inactive_threshold']['default'] for network in networks}
 
     for i in deviations:
-        deviations[i] = (deviations[i], summaries[i]['med'])
+        deviations[i] = (deviations[i], summaries[i]['3q'])
 
     def check_active(height, deviations):
         return True if (deviations[1] - deviations[0]) <= height <= (deviations[1] + deviations[0]) else False
@@ -669,7 +681,6 @@ def space_sep_df(df, spacing=3):
 
 def main(session, seed=False):
     start_time = datetime.datetime.utcnow()
-    COUNTRY, CITY, ASN = init_geoip()
     thread_pool = ThreadPoolExecutor(max_workers=CONF['threads'])
     networks = list(CONF['networks'].keys())
     prune_nodes(session)
@@ -690,8 +701,7 @@ def main(session, seed=False):
     node_processing_queue = calculate_pending_nodes(session, start_time)
     while node_processing_queue:
         node_processing_queue, node_addresses = process_pending_nodes(node_addresses, node_processing_queue,
-                                                                      recent_heights, thread_pool, session, ASN,
-                                                                      COUNTRY, CITY, mnodes)
+                                                                      recent_heights, thread_pool, session, mnodes)
         node_processing_queue = calculate_pending_nodes(session, start_time)
     logging.info("Crawling complete in {} seconds".format(round((datetime.datetime.utcnow() - start_time).seconds, 1)))
 
@@ -736,7 +746,6 @@ def generate_historic_data(session):
             .filter(NodeVisitation.success == True) \
             .filter(Node.first_seen <= interval_end) \
             .filter(Node.last_seen >= interval_end - historic_interval) \
-            .filter(NodeVisitation.network == None) \
             .group_by(NodeVisitation.parent_id,
                       case([(NodeVisitation.user_agent.ilike("% SV%"), 'bitcoin-sv')], else_=Node.network))
         df = pd.read_sql(q.statement, q.session.bind)
@@ -781,6 +790,53 @@ def generate_historic_data(session):
         df[df['network'] == network][['timestamp', 'node_count', 'masternode_count']] \
             .to_json("static/history_{}.json".format(network), orient='records')
 
+def prune_database(session):
+    if not os.path.isdir("db_cache"):
+        os.mkdir("db_cache")
+
+    session = init_db()
+
+    q = session.query(Node)
+    nodes = pd.read_sql(q.statement, q.session.bind)
+
+
+    fv = session.query(func.min(NodeVisitation.timestamp)).one()[0]
+    end_date = datetime.datetime.utcnow() - datetime.timedelta(hours=24 * 60)
+    end_date = datetime.datetime(end_date.year, end_date.month, end_date.day, 0, 0, 0)
+
+    current_date = datetime.datetime(fv.year, fv.month, fv.day, 0, 0, 0)
+    current_end = current_date + datetime.timedelta(days=1)
+
+    while current_end < end_date:
+        vq = session.query(NodeVisitation) \
+            .filter(NodeVisitation.timestamp >= current_date) \
+            .filter(NodeVisitation.timestamp < current_end)
+
+        fname = f"visitations_{current_date.strftime('%Y-%m-%d')}.gz"
+        fname = os.path.join("db_cache", fname)
+        fname2 = f"nodes_{current_date.strftime('%Y-%m-%d')}.gz"
+        fname2 = os.path.join("db_cache", fname2)
+
+        if os.path.isfile(fname) or os.path.isfile(fname2):
+            raise ValueError(fname+" exists")
+
+        df = pd.read_sql(vq.statement, vq.session.bind)
+
+
+
+        an = nodes.merge(df[['parent_id']].drop_duplicates(), left_on="id", right_on="parent_id")
+        an = an[[x for x in an.columns if x != "parent_id"]]
+
+        df.to_csv(fname, compression="gzip")
+        an.to_csv(fname2, compression="gzip")
+
+        current_date = current_date + datetime.timedelta(days=1)
+        current_end = current_date + datetime.timedelta(days=1)
+
+        vq.delete()
+        session.commit()
+    print("done")
+
 
 if __name__ == "__main__":
     session = init_db()
@@ -796,3 +852,6 @@ if __name__ == "__main__":
         while True:
             dump(session)
             main(session, seed=False)
+
+    if "--prune" in sys.argv:
+        prune_database(session)

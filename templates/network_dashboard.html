@@ -329,9 +329,7 @@
                 $("#check_node_result").show();
             }
         });
-    </script>
 
-    <script type="text/javascript">
         const numberFormat = d3.format(".2f");
 
         $.getJSON("/api/gzip_file/data{% if network %}_{{ network }}{% endif %}.json", function (dat) {
