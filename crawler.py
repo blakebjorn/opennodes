@@ -801,7 +801,7 @@ def prune_database(session):
 
 
     fv = session.query(func.min(NodeVisitation.timestamp)).one()[0]
-    end_date = datetime.datetime.utcnow() - datetime.timedelta(hours=24 * 60)
+    end_date = datetime.datetime.utcnow() - datetime.timedelta(hours=24 * 35)
     end_date = datetime.datetime(end_date.year, end_date.month, end_date.day, 0, 0, 0)
 
     current_date = datetime.datetime(fv.year, fv.month, fv.day, 0, 0, 0)
@@ -822,8 +822,6 @@ def prune_database(session):
 
         df = pd.read_sql(vq.statement, vq.session.bind)
 
-
-
         an = nodes.merge(df[['parent_id']].drop_duplicates(), left_on="id", right_on="parent_id")
         an = an[[x for x in an.columns if x != "parent_id"]]
 
@@ -835,6 +833,7 @@ def prune_database(session):
 
         vq.delete()
         session.commit()
+        print(current_end, "pruned")
     print("done")
 
 
