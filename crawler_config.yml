@@ -90,7 +90,7 @@ get_dash_masternodes: True
 # dash-masternodes-api-endpoint - used as a fallback if local node is not running
 # GET/POST request should return a json array of all active dash masternodes
 # e.g. https://running-opennodes-webserver.com/api/get_dash_masternodes
-dash_masternodes_api: None
+dash_masternodes_api: ''
 
 # dash-cli executable directory
 dash_cli_path: /usr/local/bin/dashcore-0.12.3/bin/

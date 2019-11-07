@@ -268,7 +268,7 @@ def get_dash_masternodes():
         return json.dumps(list(update_masternode_list()))
     else:
         with open(os.path.join("static","masternode_list.txt"), "r") as f:
-            return json.dumps(f.readlines())
+            return json.dumps(f.read().splitlines(keepends=False))
 
 @app.route('/api/node_history', methods=['POST'])
 @auto.doc()
