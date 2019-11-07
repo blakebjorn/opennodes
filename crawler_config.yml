@@ -104,7 +104,7 @@ networks:
     services: 0
     magic_number: f9beb4d9
     port: 8333
-    protocol_version: 70001
+    protocol_version: 70015
     min_protocol_version: 70001
     dns_seeds:
       - dnsseed.bitcoin.dashjr.org
@@ -138,7 +138,7 @@ networks:
     services: 0
     magic_number: bf0c6bbd
     port: 9999
-    protocol_version: 70213
+    protocol_version: 70215
     min_protocol_version: 70001
     dns_seeds:
       - dnsseed.darkcoin.io
@@ -163,7 +163,7 @@ networks:
     services: 0
     magic_number: fbc0b6db
     port: 9333
-    protocol_version: 70003
+    protocol_version: 70015
     min_protocol_version: 70001
     dns_seeds:
     - dnsseed.litecointools.com
