@@ -72,8 +72,8 @@ def get_user_agent_id(user_agent, _session):
             u = UserAgent(user_agent=user_agent)
             _session.add(u)
             _session.flush()
+            print(">", u.id, user_agent)
         USER_AGENTS[str(user_agent)] = int(u.id)
-        print(">", u.id, user_agent)
     return USER_AGENTS[user_agent]
 
 
@@ -516,6 +516,7 @@ def code_ip_type(inp):
     else:
         return "Unknown"
 
+
 def geocode_ip(address):
     aso = None
     asn = None
@@ -756,12 +757,12 @@ def dump(session):
     logging.info("Results saved in {} seconds".format(round((datetime.datetime.utcnow() - start_time).seconds, 1)))
 
 
-def generate_historic_data(session):
-    networks = [x[0] for x in session.query(Node.network).distinct()]
-    sd = session.query(func.min(Node.first_seen)).one()[0]
+def generate_historic_data(_session):
+    networks = [x[0] for x in _session.query(Node.network).distinct()]
+    sd = _session.query(func.min(Node.first_seen)).one()[0]
     start_date = datetime.datetime(sd.year, sd.month, sd.day,
                                    sd.hour // CONF['historic_interval'] * CONF['historic_interval'], 0, 0)
-    end_date = session.query(func.max(Node.last_seen)).one()[0]
+    end_date = _session.query(func.max(Node.last_seen)).one()[0]
 
     historic_interval = datetime.timedelta(hours=CONF['historic_interval'])
 
@@ -770,20 +771,22 @@ def generate_historic_data(session):
         last_date += historic_interval
 
     interval_end = start_date + historic_interval
-    session.query(CrawlSummary).filter(
+    _session.query(CrawlSummary).filter(
         CrawlSummary.timestamp >= (last_date - datetime.timedelta(hours=CONF['historic_interval'] * 1.5))).delete()
-    session.commit()
+    _session.commit()
     while interval_end < end_date:
-        if session.query(CrawlSummary).filter(CrawlSummary.timestamp == interval_end).count() >= 1:
+        if _session.query(CrawlSummary).filter(CrawlSummary.timestamp == interval_end).count() >= 1:
             interval_end += historic_interval
             continue
         logging.info("Summarizing period starting with {}".format(interval_end - historic_interval))
 
-        q = session.query(NodeVisitation.parent_id.label("id"),
-                          case([(NodeVisitation.user_agent.ilike("% SV%"), 'bitcoin-sv')], else_=Node.network).label(
-                              "network"),
-                          func.max(NodeVisitation.height).label("height"),
-                          func.max(case([(NodeVisitation.is_masternode, 1)], else_=0)).label("is_masternode")) \
+        sv_sq = _session.query(UserAgent.id).filter(UserAgent.user_agent.ilike("% SV%")).subquery()
+
+        q = _session.query(NodeVisitation.parent_id.label("id"),
+                           case([(sv_sq.c.id != None, 'bitcoin-sv')], else_=Node.network).label("network"),
+                           func.max(NodeVisitation.height).label("height"),
+                           func.max(case([(NodeVisitation.is_masternode, 1)], else_=0)).label("is_masternode")) \
+            .join(sv_sq, NodeVisitation.user_agent_id == sv_sq.c.id) \
             .join(Node, Node.id == NodeVisitation.parent_id) \
             .filter(NodeVisitation.timestamp >= interval_end - historic_interval) \
             .filter(NodeVisitation.timestamp <= interval_end) \
@@ -822,67 +825,18 @@ def generate_historic_data(session):
                               masternode_count=sum(netDF['is_masternode']),
                               lookback_hours=CONF['historic_interval'])
 
-            session.add(cs)
-            session.commit()
+            _session.add(cs)
+            _session.commit()
 
         interval_end += datetime.timedelta(hours=CONF['historic_interval'])
 
-    q = session.query(CrawlSummary).order_by(CrawlSummary.timestamp)
+    q = _session.query(CrawlSummary).order_by(CrawlSummary.timestamp)
     df = pd.read_sql(q.statement, q.session.bind)
     df['timestamp'] = df['timestamp'].values.astype(np.int64) // 10 ** 9
 
     for network in networks:
         df[df['network'] == network][['timestamp', 'node_count', 'masternode_count']] \
             .to_json("static/history_{}.json".format(network), orient='records')
-
-def prune_database(session):
-    if not os.path.isdir("db_cache"):
-        os.mkdir("db_cache")
-
-    session = init_db()
-
-    q = session.query(Node)
-    nodes = pd.read_sql(q.statement, q.session.bind)
-
-
-    fv = session.query(func.min(NodeVisitation.timestamp)).one()[0]
-    end_date = datetime.datetime.utcnow() - datetime.timedelta(hours=24 * 35)
-    end_date = datetime.datetime(end_date.year, end_date.month, end_date.day, 0, 0, 0)
-
-    current_date = datetime.datetime(fv.year, fv.month, fv.day, 0, 0, 0)
-    current_end = current_date + datetime.timedelta(days=1)
-
-    while current_end < end_date:
-        print(current_date.strftime('%Y-%m-%d'))
-
-        vq = session.query(NodeVisitation) \
-            .filter(NodeVisitation.timestamp >= current_date) \
-            .filter(NodeVisitation.timestamp < current_end)
-
-        fname = f"visitations_{current_date.strftime('%Y-%m-%d')}.gz"
-        fname = os.path.join("db_cache", fname)
-        fname2 = f"nodes_{current_date.strftime('%Y-%m-%d')}.gz"
-        fname2 = os.path.join("db_cache", fname2)
-
-        if os.path.isfile(fname) or os.path.isfile(fname2):
-            raise ValueError(fname+" exists")
-
-        df = pd.read_sql(vq.statement, vq.session.bind)
-
-
-
-        an = nodes.merge(df[['parent_id']].drop_duplicates(), left_on="id", right_on="parent_id")
-        an = an[[x for x in an.columns if x != "parent_id"]]
-
-        df.to_csv(fname, compression="gzip")
-        an.to_csv(fname2, compression="gzip")
-
-        current_date = current_date + datetime.timedelta(days=1)
-        current_end = current_date + datetime.timedelta(days=1)
-
-        vq.delete()
-        session.commit()
-    print("done")
 
 
 def prune_database(_session):
@@ -904,21 +858,21 @@ def prune_database(_session):
             .filter(NodeVisitation.timestamp >= current_date) \
             .filter(NodeVisitation.timestamp < current_end)
 
-        fname = f"visitations_{current_date.strftime('%Y-%m-%d')}.gz"
-        fname = os.path.join("db_cache", fname)
-        fname2 = f"nodes_{current_date.strftime('%Y-%m-%d')}.gz"
-        fname2 = os.path.join("db_cache", fname2)
+        f_name = f"visitations_{current_date.strftime('%Y-%m-%d')}.gz"
+        f_name = os.path.join("db_cache", f_name)
+        f_name_alt = f"nodes_{current_date.strftime('%Y-%m-%d')}.gz"
+        f_name_alt = os.path.join("db_cache", f_name_alt)
 
-        if os.path.isfile(fname) or os.path.isfile(fname2):
-            print(fname + " exists")
+        if os.path.isfile(f_name) or os.path.isfile(f_name_alt):
+            print(f_name + " exists")
 
-        df = pd.read_sql(vq.statement, vq._session.bind)
+        df = pd.read_sql(vq.statement, vq.session.bind)
 
         an = nodes.merge(df[['parent_id']].drop_duplicates(), left_on="id", right_on="parent_id")
         an = an[[x for x in an.columns if x != "parent_id"]]
 
-        df.to_csv(fname, compression="gzip")
-        an.to_csv(fname2, compression="gzip")
+        df.to_csv(f_name, compression="gzip")
+        an.to_csv(f_name_alt, compression="gzip")
 
         current_date = current_date + datetime.timedelta(days=1)
         current_end = current_date + datetime.timedelta(days=1)
