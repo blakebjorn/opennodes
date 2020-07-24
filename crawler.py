@@ -39,7 +39,7 @@ from geoip2.errors import AddressNotFoundError
 from sqlalchemy import create_engine, and_, or_, func, not_, case
 from sqlalchemy.orm import sessionmaker
 from protocol import ProtocolError, Connection, ConnectionError, Keepalive
-from models import Node, NodeVisitation, Base, CrawlSummary
+from models import Node, NodeVisitation, Base, CrawlSummary, UserAgent
 from config import load_config, DefaultFlaskConfig
 
 try:
@@ -58,7 +58,24 @@ ASN = Reader("geoip/GeoLite2-ASN.mmdb")
 COUNTRY = Reader("geoip/GeoLite2-Country.mmdb")
 CITY = Reader("geoip/GeoLite2-City.mmdb")
 
-RENAMED_COUNTRIES = {"South Korea":"Republic of Korea"}
+RENAMED_COUNTRIES = {"South Korea": "Republic of Korea"}
+USER_AGENTS = {}
+
+
+def get_user_agent_id(user_agent, _session):
+    user_agent = str(user_agent)
+    if len(user_agent) > 60:
+        user_agent = user_agent[:60]
+    if user_agent not in USER_AGENTS:
+        u = _session.query(UserAgent).filter(UserAgent.user_agent == user_agent).first()
+        if u is None:
+            u = UserAgent(user_agent=user_agent)
+            _session.add(u)
+            _session.flush()
+        USER_AGENTS[str(user_agent)] = int(u.id)
+        print(">", u.id, user_agent)
+    return USER_AGENTS[user_agent]
+
 
 def connect(network, address, port, to_services, network_data, user_agent=None, explicit_p2p=False, p2p_nodes=True,
             from_services=None, keepalive=False, attempt=1):
@@ -165,6 +182,7 @@ def get_seeds(port, dns_seeds, address_seeds, default_services=0):
 
     return exportList
 
+
 def init_db():
     if "sqlite:/" in SQLALCHEMY_DATABASE_URI:
         engine = create_engine(SQLALCHEMY_DATABASE_URI, connect_args={'timeout': 15}, echo=False)
@@ -215,7 +233,7 @@ def prune_nodes(session):
 
     # prune old nodes that can't be reached
     conditions = [and_(Node.last_seen == None, Node.first_checked != None,
-             Node.first_checked <= now - datetime.timedelta(days=CONF['min_pruning_age']))]
+                       Node.first_checked <= now - datetime.timedelta(days=CONF['min_pruning_age']))]
 
     # prune nodes that haven't been seen in a long time
     if CONF['max_pruning_age'] and CONF['max_pruning_age'] > CONF['min_pruning_age']:
@@ -234,7 +252,8 @@ def prune_nodes(session):
                 .filter(Node.address == None)
             deleted = 100000
             while deleted < 100000:
-                nvq = session.query(NodeVisitation).filter(NodeVisitation.id.in_([x[0] for x in nq.limit(100000).all()]))
+                nvq = session.query(NodeVisitation).filter(
+                    NodeVisitation.id.in_([x[0] for x in nq.limit(100000).all()]))
                 deleted = nvq.delete(synchronize_session=False)
                 logging.info("{} Visitations deleted".format(deleted))
 
@@ -392,7 +411,8 @@ def process_pending_nodes(node_addresses, node_processing_queue, recent_heights,
                 if not node.id:
                     session.commit()
                 vis = NodeVisitation(parent_id=node.id,
-                                     user_agent=result['user_agent'] if 'user_agent' in result else None,
+                                     user_agent_id=get_user_agent_id(
+                                         result['user_agent'], session) if 'user_agent' in result else None,
                                      success=result["seen"],
                                      timestamp=timestamp,
                                      height=result['height'] if result["seen"] else None)
@@ -429,8 +449,9 @@ def process_pending_nodes(node_addresses, node_processing_queue, recent_heights,
                 del new_nodes_to_add[i]
 
     session.commit()
-    logging.info("Checked {} Nodes, {} Seen, {} More queued up. ({}/{} retry successes, {} skipped x-network nodes)".format(
-        checked_nodes - retried_nodes, seen_nodes, pending_nodes, found_on_retry, retried_nodes, skipped_nodes))
+    logging.info(
+        "Checked {} Nodes, {} Seen, {} More queued up. ({}/{} retry successes, {} skipped x-network nodes)".format(
+            checked_nodes - retried_nodes, seen_nodes, pending_nodes, found_on_retry, retried_nodes, skipped_nodes))
     return node_processing_queue, node_addresses
 
 
@@ -459,6 +480,7 @@ def update_masternode_list():
         with open("static/masternode_list.txt", "r") as f:
             mnodes = set(f.read().splitlines(keepends=False))
     return mnodes
+
 
 def set_master_nodes(session, mnodes):
     if not mnodes:
@@ -493,6 +515,7 @@ def code_ip_type(inp):
         return "IPv6"
     else:
         return "Unknown"
+
 
 def geocode_ip(address):
     aso = None
@@ -668,6 +691,7 @@ def dump_summary(session):
         with open(os.path.join("static", "data_{}_unique.txt".format(network)), "w") as f:
             f.write(space_sep_df(netDF))
 
+
 def space_sep_df(df, spacing=3):
     df = df.copy()
     df = pd.DataFrame([df.columns], columns=df.columns).append(df)
@@ -728,7 +752,7 @@ def generate_historic_data(session):
 
     interval_end = start_date + historic_interval
     session.query(CrawlSummary).filter(
-        CrawlSummary.timestamp >= (last_date - datetime.timedelta(hours=CONF['historic_interval']*1.5))).delete()
+        CrawlSummary.timestamp >= (last_date - datetime.timedelta(hours=CONF['historic_interval'] * 1.5))).delete()
     session.commit()
     while interval_end < end_date:
         if session.query(CrawlSummary).filter(CrawlSummary.timestamp == interval_end).count() >= 1:
@@ -737,7 +761,8 @@ def generate_historic_data(session):
         logging.info("Summarizing period starting with {}".format(interval_end - historic_interval))
 
         q = session.query(NodeVisitation.parent_id.label("id"),
-                          case([(NodeVisitation.user_agent.ilike("% SV%"), 'bitcoin-sv')], else_=Node.network).label("network"),
+                          case([(NodeVisitation.user_agent.ilike("% SV%"), 'bitcoin-sv')], else_=Node.network).label(
+                              "network"),
                           func.max(NodeVisitation.height).label("height"),
                           func.max(case([(NodeVisitation.is_masternode, 1)], else_=0)).label("is_masternode")) \
             .join(Node, Node.id == NodeVisitation.parent_id) \
@@ -753,6 +778,7 @@ def generate_historic_data(session):
         df['height'] = df['height'].astype(int)
         if not df.empty:
             networks = df['network'].unique()
+
             def check_active(height, deviations):
                 return True if (deviations[1] - deviations[0]) <= height <= (deviations[1] + deviations[0]) else False
 
@@ -790,17 +816,15 @@ def generate_historic_data(session):
         df[df['network'] == network][['timestamp', 'node_count', 'masternode_count']] \
             .to_json("static/history_{}.json".format(network), orient='records')
 
-def prune_database(session):
+
+def prune_database(_session):
     if not os.path.isdir("db_cache"):
         os.mkdir("db_cache")
 
-    session = init_db()
-
-    q = session.query(Node)
+    q = _session.query(Node)
     nodes = pd.read_sql(q.statement, q.session.bind)
 
-
-    fv = session.query(func.min(NodeVisitation.timestamp)).one()[0]
+    fv = _session.query(func.min(NodeVisitation.timestamp)).one()[0]
     end_date = datetime.datetime.utcnow() - datetime.timedelta(hours=24 * 35)
     end_date = datetime.datetime(end_date.year, end_date.month, end_date.day, 0, 0, 0)
 
@@ -808,7 +832,7 @@ def prune_database(session):
     current_end = current_date + datetime.timedelta(days=1)
 
     while current_end < end_date:
-        vq = session.query(NodeVisitation) \
+        vq = _session.query(NodeVisitation) \
             .filter(NodeVisitation.timestamp >= current_date) \
             .filter(NodeVisitation.timestamp < current_end)
 
@@ -818,9 +842,9 @@ def prune_database(session):
         fname2 = os.path.join("db_cache", fname2)
 
         if os.path.isfile(fname) or os.path.isfile(fname2):
-            raise ValueError(fname+" exists")
+            print(fname + " exists")
 
-        df = pd.read_sql(vq.statement, vq.session.bind)
+        df = pd.read_sql(vq.statement, vq._session.bind)
 
         an = nodes.merge(df[['parent_id']].drop_duplicates(), left_on="id", right_on="parent_id")
         an = an[[x for x in an.columns if x != "parent_id"]]
@@ -832,7 +856,7 @@ def prune_database(session):
         current_end = current_date + datetime.timedelta(days=1)
 
         vq.delete()
-        session.commit()
+        _session.commit()
         print(current_end, "pruned")
     print("done")
 
