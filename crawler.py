@@ -782,8 +782,10 @@ def generate_historic_data(_session):
 
         sv_sq = _session.query(UserAgent.id).filter(UserAgent.user_agent.ilike("% SV%")).subquery()
 
+        case_stmt = case([(sv_sq.c.id != None, 'bitcoin-sv')], else_=Node.network)
+
         q = _session.query(NodeVisitation.parent_id.label("id"),
-                           case([(sv_sq.c.id != None, 'bitcoin-sv')], else_=Node.network).label("network"),
+                           case_stmt.label("network"),
                            func.max(NodeVisitation.height).label("height"),
                            func.max(case([(NodeVisitation.is_masternode, 1)], else_=0)).label("is_masternode")) \
             .join(sv_sq, NodeVisitation.user_agent_id == sv_sq.c.id) \
@@ -793,8 +795,7 @@ def generate_historic_data(_session):
             .filter(NodeVisitation.success == True) \
             .filter(Node.first_seen <= interval_end) \
             .filter(Node.last_seen >= interval_end - historic_interval) \
-            .group_by(NodeVisitation.parent_id,
-                      case([(NodeVisitation.user_agent.ilike("% SV%"), 'bitcoin-sv')], else_=Node.network))
+            .group_by(NodeVisitation.parent_id, case_stmt)
         df = pd.read_sql(q.statement, q.session.bind)
 
         df['height'] = df['height'].astype(int)

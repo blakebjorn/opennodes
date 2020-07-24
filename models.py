@@ -183,7 +183,6 @@ class NodeVisitation(Base):
     timestamp = Column(DateTime, default=datetime.datetime.utcnow())
     success = Column(Boolean, default=False)
     height = Column(BIGINT, nullable=True)
-    user_agent = Column(String(60))
     user_agent_id = Column(Integer)
     is_masternode = Column(Boolean, default=None)
 
