@@ -1,7 +1,7 @@
 ### Anything added to crawler_user_config.yml will overwrite these settings
 
 # Max concurrent threadpool workers - setting this too high may cause connections to be dropped
-threads: 800
+threads: 1000
 
 # Max tasks in queue - higher will minimize database IO at cost of increased memory usage
 max_queue: 20000
@@ -12,7 +12,7 @@ crawl_interval: 15
 # Proportion of connections which are followed up with a getaddr call. (0.0-1.0)
 # After initial seeding it isn't necessary for this to be very high to discover all new nodes
 # When --seed parameter is passed this is ignored
-getaddr_prop: 0.2
+getaddr_prop: 0.15
 
 # How much the block height has to differ from the median to be marked inactive
 # Dash and Litecoin have faster block times so this is set slightly higher
@@ -50,7 +50,7 @@ socket_timeout: 20
 retries: 1
 
 # Retry only nodes seen in past X hours
-retry_threshold: 48
+retry_threshold: 12
 
 # Used during connection handshake
 user_agent: /open-nodes:0.1/
@@ -82,6 +82,8 @@ excluded_user_agents:
   - /feathercoin*
   - /cryptocoin*
   - /sollida*
+  - /lkscoin*
+  - /futurebit*
 
 # Lookup whether a node is a Dash masternode or not
 get_dash_masternodes: True
@@ -89,10 +91,10 @@ get_dash_masternodes: True
 # dash-masternodes-api-endpoint - used as a fallback if local node is not running
 # GET/POST request should return a json array of all active dash masternodes
 # e.g. https://running-opennodes-webserver.com/api/get_dash_masternodes
-dash_masternodes_api: None
+dash_masternodes_api: ''
 
 # dash-cli executable directory
-dash_cli_path: /usr/local/bin/dashcore-0.12.3/bin/
+dash_cli_path: /mnt/HC_Volume_2167606/dashcore-0.13.2/bin/
 
 # historical data reporting interval (hours)
 historic_interval: 4
@@ -137,7 +139,7 @@ networks:
     services: 0
     magic_number: bf0c6bbd
     port: 9999
-    protocol_version: 70208
+    protocol_version: 70215
     min_protocol_version: 70001
     dns_seeds:
       - dnsseed.darkcoin.io
