@@ -28,6 +28,7 @@ import datetime
 
 Base = declarative_base()
 
+
 class Node(Base):
     __tablename__ = 'nodes'
 
@@ -54,24 +55,24 @@ class Node(Base):
 
     def to_dict(self):
         return {
-            "id":self.id,
-            "network":self.network,
-            "address":self.address,
-            "port":self.port,
-            "first_seen":self.first_seen,
-            "last_seen":self.last_seen,
-            "first_checked":self.first_checked,
-            "last_checked":self.last_checked,
-            "seen":self.seen,
-            "last_height":self.last_height,
-            "version":self.version,
-            "user_agent":self.user_agent,
-            "services":self.services,
-            "country":self.country,
-            "city":self.city,
+            "id": self.id,
+            "network": self.network,
+            "address": self.address,
+            "port": self.port,
+            "first_seen": self.first_seen,
+            "last_seen": self.last_seen,
+            "first_checked": self.first_checked,
+            "last_checked": self.last_checked,
+            "seen": self.seen,
+            "last_height": self.last_height,
+            "version": self.version,
+            "user_agent": self.user_agent,
+            "services": self.services,
+            "country": self.country,
+            "city": self.city,
             "asn": self.asn,
-            "aso":self.aso,
-            "is_masternode":self.is_masternode
+            "aso": self.aso,
+            "is_masternode": self.is_masternode
         }
 
     def from_dict(self, d):
@@ -134,7 +135,7 @@ class Node(Base):
         if field is not None:
             if key == 'address':
                 if len(field) > 50:
-                    print(key, field,"over max len")
+                    print(key, field, "over max len")
                     return field[:50]
             elif key == "aso":
                 if len(field) > 100:
@@ -148,6 +149,7 @@ class Node(Base):
                 print(key, field, "over max len")
                 return field[:60]
         return field
+
 
 class CrawlSummary(Base):
     __tablename__ = 'crawl_summaries'
@@ -163,6 +165,16 @@ class CrawlSummary(Base):
         return "<SUMMARY - {}:{}; {} ({} masternodes), {} hours>".format(
             self.network, self.timestamp.isoformat(), self.node_count, self.masternode_count, self.lookback_hours)
 
+
+class UserAgent(Base):
+    __tablename__ = 'user_agents'
+
+    id = Column(Integer, primary_key=True)
+    user_agent = Column(String(60))
+
+    Index('idx_user_agent', 'user_agent')
+
+
 class NodeVisitation(Base):
     __tablename__ = 'node_visitations'
 
@@ -172,19 +184,20 @@ class NodeVisitation(Base):
     success = Column(Boolean, default=False)
     height = Column(BIGINT, nullable=True)
     user_agent = Column(String(60))
+    user_agent_id = Column(Integer)
     is_masternode = Column(Boolean, default=None)
 
     Index('idx_vis_timestamp', 'timestamp')
 
     def to_dict(self):
         return {
-            "id":self.id,
-            "parent_id":self.parent_id,
-            "timestamp":self.timestamp,
-            "success":self.success,
-            "user_agent":self.user_agent,
-            "is_masternode":self.is_masternode,
-            "height":self.height
+            "id": self.id,
+            "parent_id": self.parent_id,
+            "timestamp": self.timestamp,
+            "success": self.success,
+            "user_agent_id": self.user_agent_id,
+            "is_masternode": self.is_masternode,
+            "height": self.height
         }
 
     def from_dict(self, d):
@@ -194,7 +207,7 @@ class NodeVisitation(Base):
         self.success = d["success"]
         self.height = d["height"]
         self.is_masternode = d['is_masternode']
-        self.user_agent = d['user_agent']
+        self.user_agent_id = d['user_agent_id']
 
     @staticmethod
     def new_from_dict(d):
@@ -205,17 +218,15 @@ class NodeVisitation(Base):
         obj.success = d["success"] if 'success' in d else None
         obj.height = d["height"] if 'height' in d else None
         obj.is_masternode = d['is_masternode'] if 'is_masternode' in d else None
-        obj.user_agent = d['user_agent'] if 'user_agent' in d else None
+        obj.user_agent_id = d['user_agent_id'] if 'user_agent_id' in d else None
         return obj
 
     @validates('user_agent')
     def validate_string(self, key, field):
-        if field is not None:
-            if len(field) > 60:
-                    print(key, field, "over max len")
-                    return field[:60]
+        if field is not None and len(field) > 60:
+            print(key, field, "over max len")
+            return field[:60]
         return field
-
 
     def __repr__(self):
         return "<CHECK - {}:{};{} - {}>".format(self.network, self.address, self.port, self.success)
