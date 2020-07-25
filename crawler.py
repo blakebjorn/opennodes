@@ -868,12 +868,23 @@ def prune_database(_session):
             print(f_name + " exists")
 
         df = pd.read_sql(vq.statement, vq.session.bind)
-
         an = nodes.merge(df[['parent_id']].drop_duplicates(), left_on="id", right_on="parent_id")
         an = an[[x for x in an.columns if x != "parent_id"]]
 
-        df.to_csv(f_name, compression="gzip")
-        an.to_csv(f_name_alt, compression="gzip")
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df['timestamp'] = df['timestamp'].astype(np.int64) / 1000000000
+        df['height'] = df['height'].apply(lambda x: int(x) if x else "")
+        df['success'] = df['success'].apply(lambda x: int(x) if x else "")
+        df['user_agent_id'] = df['user_agent_id'].apply(lambda x: int(x) if x else "")
+        df['is_masternode'] = df['is_masternode'].apply(lambda x: int(x) if x else "")
+        df.to_csv(f_name, compression="gzip", index=False)
+
+        for col in ("first_seen", "last_seen", "first_checked", "last_checked"):
+            an[col] = pd.to_datetime(an[col])
+            an[col] = an[col].astype(np.int64) / 1000000000
+        for col in ("seen", "last_height", "version", "services", "is_masternode"):
+            an[col] = an[col].apply(lambda x: int(x) if x else "")
+        an.to_csv(f_name_alt, compression="gzip", index=False)
 
         current_date = current_date + datetime.timedelta(days=1)
         current_end = current_date + datetime.timedelta(days=1)
@@ -881,6 +892,9 @@ def prune_database(_session):
         vq.delete()
         _session.commit()
         print(current_end, "pruned")
+    # Delete nodes that are older than 4.5 months
+    q = session.query(Node).filter(Node.last_seen < datetime.datetime.now() - datetime.timedelta(days=(30 * 4.5)))
+    print(f"Pruning {q.delete()} nodes older than 4.5 months")
     print("done")
 
 
