@@ -893,8 +893,9 @@ def prune_database(_session):
         _session.commit()
         print(current_end, "pruned")
     # Delete nodes that are older than 4.5 months
-    q = session.query(Node).filter(Node.last_seen < datetime.datetime.now() - datetime.timedelta(days=(30 * 4.5)))
+    q = _session.query(Node).filter(Node.last_seen < datetime.datetime.now() - datetime.timedelta(days=(30 * 4.5)))
     print(f"Pruning {q.delete()} nodes older than 4.5 months")
+    _session.commit()
     print("done")
 
 
