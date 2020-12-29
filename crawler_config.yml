@@ -1,4 +1,8 @@
 ### Anything added to crawler_user_config.yml will overwrite these settings
+daemon:
+  crawl_frequency: 15
+  dump_frequency: 60
+  prune_frequency: 10080
 
 # Max concurrent threadpool workers - setting this too high may cause connections to be dropped
 threads: 1000

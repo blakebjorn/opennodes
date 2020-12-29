@@ -24,40 +24,30 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import datetime
 import json
+import logging
+import os
 import re
 import socket
-import time
-import requests
 import sys
-import os
-import logging
-import pandas as pd
-import numpy as np
+import time
 from concurrent.futures import ThreadPoolExecutor
+
+import numpy as np
+import pandas as pd
+import requests
 from geoip2.database import Reader
 from geoip2.errors import AddressNotFoundError
-from sqlalchemy import create_engine, and_, or_, func, not_, case
-from sqlalchemy.orm import sessionmaker
-from protocol import ProtocolError, Connection, ConnectionError, Keepalive
-from models import Node, NodeVisitation, Base, CrawlSummary, UserAgent
-from config import load_config, DefaultFlaskConfig
+from sqlalchemy import and_, or_, func, not_, case
 
-try:
-    from flask_user_config import SQLALCHEMY_DATABASE_URI
-except ImportError:
-    try:
-        from flask_config import SQLALCHEMY_DATABASE_URI
-    except ImportError:
-        SQLALCHEMY_DATABASE_URI = DefaultFlaskConfig.SQLALCHEMY_DATABASE_URI
+from config import load_config
+from models import Node, NodeVisitation, CrawlSummary, UserAgent, init_db
+from protocol import ProtocolError, Connection, ConnectionError, Keepalive
 
 logging.basicConfig(level=logging.INFO)
-
 CONF = load_config()
-
 ASN = Reader("geoip/GeoLite2-ASN.mmdb")
 COUNTRY = Reader("geoip/GeoLite2-Country.mmdb")
 CITY = Reader("geoip/GeoLite2-City.mmdb")
-
 RENAMED_COUNTRIES = {"South Korea": "Republic of Korea"}
 USER_AGENTS = {}
 
@@ -181,16 +171,6 @@ def get_seeds(port, dns_seeds, address_seeds, default_services=0):
         exportList.append((address, port, default_services))
 
     return exportList
-
-
-def init_db():
-    if "sqlite:/" in SQLALCHEMY_DATABASE_URI:
-        engine = create_engine(SQLALCHEMY_DATABASE_URI, connect_args={'timeout': 15}, echo=False)
-    else:
-        engine = create_engine(SQLALCHEMY_DATABASE_URI, echo=False)
-    Base.metadata.create_all(engine)
-    Sess = sessionmaker(bind=engine, autoflush=False)
-    return Sess()
 
 
 def init_crawler(session, networks):
@@ -456,17 +436,28 @@ def process_pending_nodes(node_addresses, node_processing_queue, recent_heights,
 
 
 def update_masternode_list():
-    mnodes = set()
-    comm = "dash-cli"
-    if os.path.isdir(CONF['dash_cli_path']):
-        comm = os.path.join(CONF['dash_cli_path'], "dash-cli")
-    masternodes = os.popen('{} masternode list full'.format(comm)).read().strip()
-    if masternodes:
+    # import requests
+    if os.environ.get("DASH_RPC_URI"):
+        print("GETTING MASTERNODES")
+        resp = requests.post(os.environ.get("DASH_RPC_URI"),
+                             json={"jsonrpc": "2.0", "id": "jsonrpc", "method": "masternode", "params": ["list"]},
+                             auth=(os.environ.get("DASH_RPC_USER"), os.environ.get("DASH_RPC_PASS")))
+        print(resp.text)
+        masternodes = resp.json()['result']
+    else:
+        comm = "dash-cli"
+        if os.path.isdir(CONF['dash_cli_path']):
+            comm = os.path.join(CONF['dash_cli_path'], "dash-cli")
+        masternodes = os.popen('{} masternode list full'.format(comm)).read().strip()
         masternodes = json.loads(masternodes)
+
+    mnodes = set()
+    if masternodes:
         for i in masternodes:
             vals = masternodes[i].strip().split(" ")
             address = vals[-1]
             mnodes.add(address.strip())
+
     if not masternodes and CONF['dash_masternodes_api']:
         try:
             mnodes = set(requests.post(CONF['dash_masternodes_api']).json())
@@ -901,18 +892,34 @@ def prune_database(_session):
 
 if __name__ == "__main__":
     session = init_db()
-
     if "--crawl" in sys.argv:
         main(session, seed=True if "--seed" in sys.argv else False)
 
     if "--dump" in sys.argv:
         dump(session)
 
-    if "--loop" in sys.argv:
+    if "--daemon" in sys.argv:
+        conf = CONF.get('daemon', {})
+        crawl_interval = int(conf.get('crawl_interval', 15))
+        dump_interval = int(conf.get('dump_interval', 60))
+        prune_interval = conf.get('prune_interval', None)
         main(session, seed=True if "--seed" in sys.argv else False)
+        now = int(time.time())
+        last_minutes = -1
         while True:
-            dump(session)
-            main(session, seed=False)
+            minutes = int(now / 60)
+            if minutes != last_minutes:
+                last_minutes = minutes
+                if minutes % crawl_interval == 0:
+                    main(session, seed=False)
+                if minutes % dump_interval == 0:
+                    dump(session)
+                if prune_interval is not None and minutes % int(prune_interval) == 0:
+                    prune_database(session)
+
+            now += 1
+            while now > time.time():
+                time.sleep(0.1)
 
     if "--prune" in sys.argv:
         prune_database(session)

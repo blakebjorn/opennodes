@@ -28,25 +28,25 @@ import os
 import sys
 from io import BytesIO
 
+import waitress
 from flask import Flask, render_template, request, redirect, flash, Response
 from flask_sqlalchemy import SQLAlchemy
 from geoip2.errors import AddressNotFoundError
 from sqlalchemy import and_
 
-from config import load_config, DefaultFlaskConfig
+from config import load_config, DATABASE_URI
 from crawler import COUNTRY, CITY, ASN, connect, update_masternode_list
 from models import *
 import pandas as pd
 from autodoc import Autodoc
 
-
 app = Flask(__name__)
 auto = Autodoc(app)
-app.config.from_object(DefaultFlaskConfig())
-app.config.from_object('flask_config')
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URI
 db = SQLAlchemy(app)
 
 CONF = load_config()
+
 
 @app.route('/')
 @app.route('/networks/<network_name>', methods=['GET'])
@@ -121,6 +121,7 @@ def gzip_static_file(filename):
         return redirect("/", code=404)
     with open(os.path.join("static", filename), "r") as f:
         return gzip_response(f.read(), False)
+
 
 def deconstruct_address_string(inp):
     assert isinstance(inp, str)
@@ -257,6 +258,7 @@ def get_node_list():
         q = q.filter(Node.network == network)
     return pd.read_sql(q.statement, q.session.bind).to_json(orient='records')
 
+
 @app.route('/api/get_dash_masternodes', methods=['POST'])
 @auto.doc()
 def get_dash_masternodes():
@@ -264,11 +266,12 @@ def get_dash_masternodes():
     Returns a list of all active dash masternodes - requires running dashd service on target server
     :return: json array ["45.76.112.193:9999", "206.189.110.182:9999", ...]
     """
-    if not os.path.isfile(os.path.join("static","masternode_list.txt")):
+    if not os.path.isfile(os.path.join("static", "masternode_list.txt")):
         return json.dumps(list(update_masternode_list()))
     else:
-        with open(os.path.join("static","masternode_list.txt"), "r") as f:
+        with open(os.path.join("static", "masternode_list.txt"), "r") as f:
             return json.dumps(f.read().splitlines(keepends=False))
+
 
 @app.route('/api/node_history', methods=['POST'])
 @auto.doc()
@@ -278,7 +281,6 @@ def get_node_history():
     :param node: connection string, e.g. btc:127.0.0.1:8333 - port is optional if it is the network default.
     :return: json dict {"node":{"user_agent":"/Satoshi/", "last_seen": ... }, "history":{"timestamp":157032190321,"height":56000, "success":1 ...}}
     """
-
 
     node = request.form.get("node")
 
@@ -369,11 +371,11 @@ def to_json(d):
     return json.dumps(d)
 
 
-
-
-
 def main():
-    app.run("0.0.0.0", debug=False if "--prod" in sys.argv else True, port=8888 if "--prod" in sys.argv else 5000)
+    if "--prod" in sys.argv:
+        waitress.serve(app, host=os.environ.get("SERVER_HOST", "127.0.0.1"), port=os.environ.get("SERVER_PORT", 5000))
+    else:
+        app.run("0.0.0.0", debug=True, port=5000)
 
 if __name__ == '__main__':
     main()

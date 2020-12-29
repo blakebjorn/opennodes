@@ -22,9 +22,11 @@
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import validates
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Index, BIGINT
+from sqlalchemy.orm import validates, sessionmaker
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Index, BIGINT, create_engine
 import datetime
+
+import config
 
 Base = declarative_base()
 
@@ -229,3 +231,13 @@ class NodeVisitation(Base):
 
     def __repr__(self):
         return "<CHECK - {}:{};{} - {}>".format(self.network, self.address, self.port, self.success)
+
+
+def init_db():
+    if "sqlite:/" in config.DATABASE_URI:
+        engine = create_engine(config.DATABASE_URI, connect_args={'timeout': 15}, echo=False)
+    else:
+        engine = create_engine(config.DATABASE_URI, echo=False)
+    Base.metadata.create_all(engine)
+    Sess = sessionmaker(bind=engine, autoflush=False)
+    return Sess()

@@ -1,0 +1,77 @@
+version: '2.3'
+
+services:
+  postgres:
+    container_name: opennodes-postgres
+    image: postgres:alpine
+    environment:
+      POSTGRES_DB: opennodes
+      POSTGRES_PASSWORD: mypassword
+    volumes:
+      - ./postgres-data:/var/lib/postgresql
+    mem_limit: 2g
+    memswap_limit: 4g
+    ports:
+      - "127.0.0.1:5432:5432"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "2m"
+        max-file: "1"
+  opennodes_crawler:
+    container_name: opennodes-crawler
+    build:
+      context: ""
+      dockerfile: Dockerfile
+    volumes:
+      - ./static:/static
+      - ./geoip:/geoip
+    entrypoint:
+      - python
+      - crawler.py
+      - --daemon
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "2m"
+        max-file: "1"
+  opennodes_site:
+    container_name: opennodes-site
+    build:
+      context: ""
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./static:/static
+      - ./geoip:/geoip
+    entrypoint:
+      - python
+      - server.py
+      - --prod
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "2m"
+        max-file: "1"
+  opennodes_dashd:
+    container_name: opennodes-dashd
+    build: https://github.com/dashpay/docker-dashd.git
+    ports:
+      - "9999:9999"
+      - "127.0.0.1:9998:9998"
+    volumes:
+      - ./dash:/dash
+    environment:
+      DISABLEWALLET: 1
+      PRINTTOCONSOLE: 1
+      RPCUSER: myrpcuser
+      RPCPASSWORD: myrpcpassword
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "2m"
+        max-file: "1"
+
+

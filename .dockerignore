@@ -1,0 +1,11 @@
+*.db
+venv
+__pycache__
+.idea
+.ipynb_checkpoints
+*.pyc
+.git
+**/temp/
+**/logs/
+**/geoip/
+node_modules

@@ -8,4 +8,5 @@ flask_sqlalchemy
 numpy
 pandas
 pyyaml
-uwsgi
+waitress
+psycopg2-binary

@@ -4,6 +4,12 @@ Open Nodes is a crawler that attempts to map out all nodes of crypto currencies 
 
 A flask web server is included to display the data.
 
+You will need to download the 3 geoip files (cities, countries, and ASN) from the maxmind site - this requires registration. Copy the .mmdb files into the `geoip` directory
+
+### Usage (Docker)
+```
+docker-compose up
+```
 ### Usage
 ```
 # Install python virtual environment

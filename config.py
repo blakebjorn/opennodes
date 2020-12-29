@@ -23,16 +23,16 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import logging
+import os
 import re
 import requests
 import yaml
 import binascii
+import dotenv
 from ipaddress import ip_network
 
-class DefaultFlaskConfig(object):
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///nodes.sqlite'
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-    TEMPLATES_AUTO_RELOAD = True
+dotenv.load_dotenv()
+DATABASE_URI = os.environ.get("DATABASE_URI", "sqlite:///nodes.sqlite")
 
 def list_excluded_networks(networks):
     """
@@ -65,7 +65,7 @@ def get_ipv4_bogons():
 
 def load_config():
     with open("crawler_config.yml", "r") as f:
-        conf = yaml.load(f)
+        conf = yaml.load(f, yaml.SafeLoader)
 
     if 'networks' in conf:
         for network in conf['networks']:
