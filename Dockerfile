@@ -6,7 +6,6 @@ RUN apk --no-cache add g++ postgresql-dev
 
 COPY requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir python-dotenv
 
 COPY . .
 CMD ['python', 'daemon.py']

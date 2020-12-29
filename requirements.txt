@@ -10,3 +10,4 @@ pandas
 pyyaml
 waitress
 psycopg2-binary
+python-dotenv
