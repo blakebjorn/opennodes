@@ -1,15 +1,17 @@
 version: '2.3'
 
 services:
-  postgres:
+  opennodes_postgres:
+    restart: always
     container_name: opennodes-postgres
     image: postgres:alpine
     environment:
       POSTGRES_DB: opennodes
       POSTGRES_PASSWORD: mypassword
     volumes:
-      - ./postgres-data:/var/lib/postgresql
-    mem_limit: 2g
+      - ./postgres/lib:/var/lib/postgresql
+      - ./postgres/data:/var/lib/postgresql/data
+    mem_limit: 3g
     memswap_limit: 4g
     ports:
       - "127.0.0.1:5432:5432"
@@ -19,6 +21,9 @@ services:
         max-size: "2m"
         max-file: "1"
   opennodes_crawler:
+    restart: always
+    depends_on:
+      - opennodes_postgres
     container_name: opennodes-crawler
     build:
       context: ""
@@ -26,6 +31,7 @@ services:
     volumes:
       - ./static:/static
       - ./geoip:/geoip
+      - ./db_cache:/db_cache
     entrypoint:
       - python
       - crawler.py
@@ -36,12 +42,16 @@ services:
         max-size: "2m"
         max-file: "1"
   opennodes_site:
+    restart: always
+    depends_on:
+      - opennodes_postgres
+      - opennodes_dashd
     container_name: opennodes-site
     build:
       context: ""
       dockerfile: Dockerfile
     ports:
-      - "5000:5000"
+      - "8888:8888"
     volumes:
       - ./static:/static
       - ./geoip:/geoip
@@ -55,6 +65,7 @@ services:
         max-size: "2m"
         max-file: "1"
   opennodes_dashd:
+    restart: always
     container_name: opennodes-dashd
     build: https://github.com/dashpay/docker-dashd.git
     ports:
@@ -67,11 +78,17 @@ services:
       PRINTTOCONSOLE: 1
       RPCUSER: myrpcuser
       RPCPASSWORD: myrpcpassword
-
     logging:
       driver: "json-file"
       options:
         max-size: "2m"
         max-file: "1"
+  opennodes_tor:
+    restart: always
+    container_name: opennodes-tor
+    image: dperson/torproxy
+    ports:
+      - "9050:9050"
+      - "8118:8118"
 
 

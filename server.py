@@ -43,6 +43,7 @@ from autodoc import Autodoc
 app = Flask(__name__)
 auto = Autodoc(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URI
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 CONF = load_config()

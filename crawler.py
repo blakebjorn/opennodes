@@ -76,9 +76,7 @@ def connect(network, address, port, to_services, network_data, user_agent=None, 
         handshake_msgs = []
         new_addrs = []
 
-        proxy = None
-        if address.endswith(".onion"):
-            proxy = CONF['tor_proxy']
+        proxy = CONF['tor_proxy'] if address.endswith(".onion") else None
 
         conn = Connection((address, port),
                           (CONF['source_address'], 0),
@@ -207,37 +205,26 @@ def check_dns(network_data, nodeAddresses):
     return nodes
 
 
-def prune_nodes(session):
-    now = datetime.datetime.utcnow()
-    q = session.query(Node)
-
+def prune_nodes(_session):
     # prune old nodes that can't be reached
-    conditions = [and_(Node.last_seen == None, Node.first_checked != None,
-                       Node.first_checked <= now - datetime.timedelta(days=CONF['min_pruning_age']))]
+    pruned = _session.query(Node)\
+        .filter(
+        and_(
+            Node.last_seen == None, Node.first_checked != None,
+            Node.first_checked <= datetime.datetime.utcnow() - datetime.timedelta(days=CONF['min_pruning_age'])
+        )).delete()
 
-    # prune nodes that haven't been seen in a long time
-    if CONF['max_pruning_age'] and CONF['max_pruning_age'] > CONF['min_pruning_age']:
-        conditions.append(and_(Node.last_seen != None,
-                               Node.last_seen <= now - datetime.timedelta(days=CONF['max_pruning_age'])))
-    q = q.filter(or_(*conditions))
-
-    pruned = q.delete()
     if pruned > 0:
         logging.info("Pruned {} nodes".format(pruned))
 
         # prune visitations that no longer have a parent node
         if CONF['prune_visitations']:
-            nq = session.query(NodeVisitation.id) \
+            deleted = _session.query(NodeVisitation) \
                 .outerjoin(Node, Node.id == NodeVisitation.parent_id) \
-                .filter(Node.address == None)
-            deleted = 100000
-            while deleted < 100000:
-                nvq = session.query(NodeVisitation).filter(
-                    NodeVisitation.id.in_([x[0] for x in nq.limit(100000).all()]))
-                deleted = nvq.delete(synchronize_session=False)
-                logging.info("{} Visitations deleted".format(deleted))
+                .filter(Node.address == None).delete(synchronize_session=False)
+            logging.info("{} Visitations deleted".format(deleted))
 
-        session.commit()
+        _session.commit()
 
 
 def calculate_pending_nodes(session, start_time):
@@ -308,22 +295,22 @@ def process_pending_nodes(node_addresses, node_processing_queue, recent_heights,
     q = session.query(Node.network, Node.address, Node.port, Node.last_seen) \
         .filter(Node.last_seen > datetime.datetime.utcnow() - datetime.timedelta(days=3))
 
-    activeIps = {}
+    active_ips = {}
     for x in q.all():
         key = x.address + "|" + str(x.port)
-        if key not in activeIps:
-            activeIps[key] = (x.network, x.last_seen)
+        if key not in active_ips:
+            active_ips[key] = (x.network, x.last_seen)
         else:
             # Prioritize bitcoin cash nodes, as its the only client that bans when the wrong magic number is sent
             if x.network == "bitcoin-cash":
-                activeIps[key] = (x.network, x.last_seen)
-            elif x.last_seen > activeIps[key][1] and activeIps[key][0] != "bitcoin-cash":
-                activeIps[key] = (x.network, x.last_seen)
+                active_ips[key] = (x.network, x.last_seen)
+            elif x.last_seen > active_ips[key][1] and active_ips[key][0] != "bitcoin-cash":
+                active_ips[key] = (x.network, x.last_seen)
 
     while node_processing_queue:
         node = node_processing_queue.pop(0)
-        if "{}|{}".format(node.address, node.port) in activeIps and activeIps["{}|{}".format(node.address, node.port)][
-            0] != node.network:
+        if "{}|{}".format(node.address, node.port) in active_ips and \
+                active_ips["{}|{}".format(node.address, node.port)][0] != node.network:
             node.last_checked = datetime.datetime.utcnow()
             session.add(node)
             skipped_nodes += 1
@@ -442,7 +429,6 @@ def update_masternode_list():
         resp = requests.post(os.environ.get("DASH_RPC_URI"),
                              json={"jsonrpc": "2.0", "id": "jsonrpc", "method": "masternode", "params": ["list"]},
                              auth=(os.environ.get("DASH_RPC_USER"), os.environ.get("DASH_RPC_PASS")))
-        print(resp.text)
         masternodes = resp.json()['result']
     else:
         comm = "dash-cli"
@@ -451,26 +437,28 @@ def update_masternode_list():
         masternodes = os.popen('{} masternode list full'.format(comm)).read().strip()
         masternodes = json.loads(masternodes)
 
-    mnodes = set()
+    m_nodes = set()
     if masternodes:
-        for i in masternodes:
-            vals = masternodes[i].strip().split(" ")
-            address = vals[-1]
-            mnodes.add(address.strip())
+        for i, vals in masternodes.items():
+            if isinstance(vals, dict):
+                address = vals['address']
+            else:
+                address = vals[-1]
+            m_nodes.add(address.strip())
 
     if not masternodes and CONF['dash_masternodes_api']:
         try:
-            mnodes = set(requests.post(CONF['dash_masternodes_api']).json())
+            m_nodes = set(requests.post(CONF['dash_masternodes_api']).json())
         except:
             pass
 
-    if mnodes:
+    if m_nodes:
         with open("static/masternode_list.txt", 'w') as f:
-            f.write("\n".join(mnodes))
+            f.write("\n".join(m_nodes))
     elif os.path.isfile("static/masternode_list.txt"):
         with open("static/masternode_list.txt", "r") as f:
-            mnodes = set(f.read().splitlines(keepends=False))
-    return mnodes
+            m_nodes = set(f.read().splitlines(keepends=False))
+    return m_nodes
 
 
 def set_master_nodes(session, mnodes):
@@ -838,8 +826,8 @@ def prune_database(_session):
     q = _session.query(Node)
     nodes = pd.read_sql(q.statement, q.session.bind)
 
-    fv = _session.query(func.min(NodeVisitation.timestamp)).one()[0]
-    end_date = datetime.datetime.utcnow() - datetime.timedelta(hours=24 * 35)
+    fv = _session.query(func.min(NodeVisitation.timestamp)).first()[0]
+    end_date = datetime.datetime.utcnow() - datetime.timedelta(hours=24 * CONF['max_pruning_age'])
     end_date = datetime.datetime(end_date.year, end_date.month, end_date.day, 0, 0, 0)
 
     current_date = datetime.datetime(fv.year, fv.month, fv.day, 0, 0, 0)
@@ -855,19 +843,16 @@ def prune_database(_session):
         f_name_alt = f"nodes_{current_date.strftime('%Y-%m-%d')}.gz"
         f_name_alt = os.path.join("db_cache", f_name_alt)
 
-        if os.path.isfile(f_name) or os.path.isfile(f_name_alt):
-            print(f_name + " exists")
-
         df = pd.read_sql(vq.statement, vq.session.bind)
         an = nodes.merge(df[['parent_id']].drop_duplicates(), left_on="id", right_on="parent_id")
         an = an[[x for x in an.columns if x != "parent_id"]]
 
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         df['timestamp'] = df['timestamp'].astype(np.int64) / 1000000000
-        df['height'] = df['height'].apply(lambda x: int(x) if x else "")
-        df['success'] = df['success'].apply(lambda x: int(x) if x else "")
-        df['user_agent_id'] = df['user_agent_id'].apply(lambda x: int(x) if x else "")
-        df['is_masternode'] = df['is_masternode'].apply(lambda x: int(x) if x else "")
+        df['height'] = df['height'].fillna(-1).apply(lambda x: int(x) if x > 0 else "")
+        df['success'] = df['success'].fillna(-1).apply(lambda x: int(x) if x > 0 else "")
+        df['user_agent_id'] = df['user_agent_id'].fillna(-1).apply(lambda x: int(x) if x > 0 else "")
+        df['is_masternode'] = df['is_masternode'].fillna(-1).apply(lambda x: int(x) if x > 0 else "")
         df.to_csv(f_name, compression="gzip", index=False)
 
         for col in ("first_seen", "last_seen", "first_checked", "last_checked"):
@@ -877,17 +862,12 @@ def prune_database(_session):
             an[col] = an[col].apply(lambda x: int(x) if x else "")
         an.to_csv(f_name_alt, compression="gzip", index=False)
 
+        deleted = vq.delete()
+        _session.commit()
+
         current_date = current_date + datetime.timedelta(days=1)
         current_end = current_date + datetime.timedelta(days=1)
-
-        vq.delete()
-        _session.commit()
-        print(current_end, "pruned")
-    # Delete nodes that are older than 4.5 months
-    q = _session.query(Node).filter(Node.last_seen < datetime.datetime.now() - datetime.timedelta(days=(30 * 4.5)))
-    print(f"Pruning {q.delete()} nodes older than 4.5 months")
-    _session.commit()
-    print("done")
+        print(f"pruned up to {current_end} // {deleted} visitations removed")
 
 
 if __name__ == "__main__":
@@ -898,14 +878,21 @@ if __name__ == "__main__":
     if "--dump" in sys.argv:
         dump(session)
 
+    if "--prune" in sys.argv:
+        prune_database(session)
+
     if "--daemon" in sys.argv:
         conf = CONF.get('daemon', {})
         crawl_interval = int(conf.get('crawl_interval', 15))
         dump_interval = int(conf.get('dump_interval', 60))
         prune_interval = conf.get('prune_interval', None)
-        main(session, seed=True if "--seed" in sys.argv else False)
         now = int(time.time())
         last_minutes = -1
+
+        main(session, seed=True)
+        dump(session)
+        if prune_interval is not None:
+            prune_database(session)
         while True:
             minutes = int(now / 60)
             if minutes != last_minutes:
@@ -920,6 +907,3 @@ if __name__ == "__main__":
             now += 1
             while now > time.time():
                 time.sleep(0.1)
-
-    if "--prune" in sys.argv:
-        prune_database(session)

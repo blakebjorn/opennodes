@@ -67,6 +67,11 @@ def load_config():
     with open("crawler_config.yml", "r") as f:
         conf = yaml.load(f, yaml.SafeLoader)
 
+    if os.path.isfile("crawler_user_config.yml"):
+        with open("crawler_user_config.yml", "r") as f:
+            conf2 = yaml.load(f, yaml.SafeLoader)
+        conf.update(conf2)
+
     if 'networks' in conf:
         for network in conf['networks']:
             conf['networks'][network]['magic_number'] = binascii.unhexlify(
@@ -85,7 +90,9 @@ def load_config():
         conf['user_agent'] = conf['user_agent'].encode()
 
     if 'tor_proxy' in conf and conf['tor_proxy']:
-        conf['tor_proxy'] = conf['tor_proxy'].split(":")
-        conf['tor_proxy'][1] = int(conf['tor_proxy'][1])
+        assert ":" in conf['tor_proxy']
+        port = int(conf['tor_proxy'].split(":")[-1])
+        address = conf['tor_proxy'].split(f":{port}")[0]
+        conf['tor_proxy'] = (address, port)
 
     return conf
