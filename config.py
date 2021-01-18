@@ -32,7 +32,13 @@ import dotenv
 from ipaddress import ip_network
 
 dotenv.load_dotenv()
-DATABASE_URI = os.environ.get("DATABASE_URI", "sqlite:///nodes.sqlite")
+
+if os.environ.get("DB_HOST"):
+    DATABASE_URI = f"{os.environ['DB_TYPE']}://{os.environ['DB_USER']}:{os.environ['DB_PASS']}@" \
+                   f"{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/{os.environ['DB_NAME']}"
+else:
+    DATABASE_URI = os.environ.get("DATABASE_URI", "sqlite:///nodes.sqlite")
+
 
 def list_excluded_networks(networks):
     """
@@ -69,8 +75,7 @@ def load_config():
 
     if os.path.isfile("crawler_user_config.yml"):
         with open("crawler_user_config.yml", "r") as f:
-            conf2 = yaml.load(f, yaml.SafeLoader)
-        conf.update(conf2)
+            conf.update(yaml.load(f, yaml.SafeLoader))
 
     if 'networks' in conf:
         for network in conf['networks']:

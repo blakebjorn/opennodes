@@ -241,3 +241,6 @@ def init_db():
     Base.metadata.create_all(engine)
     Sess = sessionmaker(bind=engine, autoflush=False)
     return Sess()
+
+
+session = init_db()

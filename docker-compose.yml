@@ -7,12 +7,12 @@ services:
     image: postgres:alpine
     environment:
       POSTGRES_DB: opennodes
-      POSTGRES_PASSWORD: mypassword
+      POSTGRES_PASSWORD: "${DB_PASS}"
     volumes:
       - ./postgres/lib:/var/lib/postgresql
       - ./postgres/data:/var/lib/postgresql/data
-    mem_limit: 3g
-    memswap_limit: 4g
+    mem_limit: 2g
+    memswap_limit: 3g
     ports:
       - "127.0.0.1:5432:5432"
     logging:
@@ -88,7 +88,16 @@ services:
     container_name: opennodes-tor
     image: dperson/torproxy
     ports:
-      - "9050:9050"
+      - "127.0.0.1:9050:9050"
       - "8118:8118"
+  opennodes_ipv6nat:
+    restart: always
+    container_name: opennodes-ipv6nat
+    image: robbertkl/ipv6nat
+    network_mode: "host"
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /lib/modules:/lib/modules:ro
 
 

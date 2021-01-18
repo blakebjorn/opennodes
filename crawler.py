@@ -40,10 +40,11 @@ from geoip2.errors import AddressNotFoundError
 from sqlalchemy import and_, or_, func, not_, case
 
 from config import load_config
-from models import Node, NodeVisitation, CrawlSummary, UserAgent, init_db
+from models import Node, NodeVisitation, CrawlSummary, UserAgent, session
 from protocol import ProtocolError, Connection, ConnectionError, Keepalive
 
 logging.basicConfig(level=logging.INFO)
+
 CONF = load_config()
 ASN = Reader("geoip/GeoLite2-ASN.mmdb")
 COUNTRY = Reader("geoip/GeoLite2-Country.mmdb")
@@ -52,16 +53,16 @@ RENAMED_COUNTRIES = {"South Korea": "Republic of Korea"}
 USER_AGENTS = {}
 
 
-def get_user_agent_id(user_agent, _session):
+def get_user_agent_id(user_agent):
     user_agent = str(user_agent)
     if len(user_agent) > 60:
         user_agent = user_agent[:60]
     if user_agent not in USER_AGENTS:
-        u = _session.query(UserAgent).filter(UserAgent.user_agent == user_agent).first()
+        u = session.query(UserAgent).filter(UserAgent.user_agent == user_agent).first()
         if u is None:
             u = UserAgent(user_agent=user_agent)
-            _session.add(u)
-            _session.flush()
+            session.add(u)
+            session.flush()
             print(">", u.id, user_agent)
         USER_AGENTS[str(user_agent)] = int(u.id)
     return USER_AGENTS[user_agent]
@@ -69,8 +70,8 @@ def get_user_agent_id(user_agent, _session):
 
 def connect(network, address, port, to_services, network_data, user_agent=None, explicit_p2p=False, p2p_nodes=True,
             from_services=None, keepalive=False, attempt=1):
-    now = datetime.datetime.utcnow()
-    results = {'network': network, 'address': address, 'port': port, 'timestamp': now, 'seen': 0, 'attempt': attempt}
+    results = {'network': network, 'address': address, 'port': port,
+               'timestamp': datetime.datetime.utcnow(), 'seen': 0, 'attempt': attempt}
 
     try:
         handshake_msgs = []
@@ -113,7 +114,7 @@ def connect(network, address, port, to_services, network_data, user_agent=None, 
             if len(handshake_msgs) > 0 and (p2p_nodes or explicit_p2p):
                 getaddr = True
                 chance = CONF['getaddr_prop']
-                if chance < 1.0 and p2p_nodes and not explicit_p2p and not "--seed" in sys.argv:
+                if chance < 1.0 and p2p_nodes and not explicit_p2p and "--seed" not in sys.argv:
                     if np.random.rand() > chance:
                         getaddr = False
 
@@ -129,7 +130,7 @@ def connect(network, address, port, to_services, network_data, user_agent=None, 
                 Keepalive(conn, 10).keepalive(addr=True if p2p_nodes else False)
             for msg in msgs:
                 if msg['count'] > 1:
-                    ts = now.timestamp()
+                    ts = results['timestamp'].timestamp()
                     for addr in msg['addr_list']:
                         if ts - addr['timestamp'] < 12 * 60 * 60:  # within 6 hours
                             new_addrs.append(addr)
@@ -144,7 +145,7 @@ def get_seeds(port, dns_seeds, address_seeds, default_services=0):
     """
     Initializes a list of reachable nodes from DNS seeders and hardcoded nodes to bootstrap the crawler.
     """
-    exportList = []
+    export_list = []
     for seeder in dns_seeds:
         nodes = []
 
@@ -163,21 +164,21 @@ def get_seeds(port, dns_seeds, address_seeds, default_services=0):
 
         for node in nodes:
             address = node[-1][0]
-            exportList.append((address, port, default_services))
+            export_list.append((address, port, default_services))
 
     for address in address_seeds:
-        exportList.append((address, port, default_services))
+        export_list.append((address, port, default_services))
 
-    return exportList
+    return export_list
 
 
-def init_crawler(session, networks):
+def init_crawler(networks):
     # Populates list of all known node addresses and block heights
     db_networks = [x[0] for x in session.query(Node.network).distinct().all()]
     node_addresses = {}
     recent_heights = {}
     for network in set(db_networks + networks):
-        node_addresses[network] = {"{};{}".format(y.address, y.port) for y in \
+        node_addresses[network] = {"{};{}".format(y.address, y.port) for y in
                                    session.query(Node.address, Node.port).filter(Node.network == network).all()}
         count = session.query(Node).filter(and_(Node.network == network, Node.last_height != None)).count()
         if count > 0:
@@ -190,24 +191,24 @@ def init_crawler(session, networks):
     return node_addresses, recent_heights
 
 
-def check_dns(network_data, nodeAddresses):
+def check_dns(network_data, node_addresses):
     nodes = []
     for network in network_data:
         nc = network_data[network]
-        dnsNodeAddrs = get_seeds(nc['port'], nc['dns_seeds'], nc['address_seeds'], default_services=nc['services'])
-        for nodeAddr in dnsNodeAddrs:
+        dns_node_addrs = get_seeds(nc['port'], nc['dns_seeds'], nc['address_seeds'], default_services=nc['services'])
+        for nodeAddr in dns_node_addrs:
             if nodeAddr[0] and nodeAddr[1]:
-                if not "{};{}".format(nodeAddr[0], nodeAddr[1]) in nodeAddresses[network]:
-                    nodeAddresses[network].add("{};{}".format(nodeAddr[0], nodeAddr[1]))
-                    newNode = Node(network=network, address=nodeAddr[0], port=int(nodeAddr[1]),
-                                   services=int(nodeAddr[2]))
-                    nodes.append(newNode)
+                if not "{};{}".format(nodeAddr[0], nodeAddr[1]) in node_addresses[network]:
+                    node_addresses[network].add("{};{}".format(nodeAddr[0], nodeAddr[1]))
+                    new_node = Node(network=network, address=nodeAddr[0],
+                                    port=int(nodeAddr[1]), services=int(nodeAddr[2]))
+                    nodes.append(new_node)
     return nodes
 
 
-def prune_nodes(_session):
+def prune_nodes():
     # prune old nodes that can't be reached
-    pruned = _session.query(Node)\
+    pruned = session.query(Node) \
         .filter(
         and_(
             Node.last_seen == None, Node.first_checked != None,
@@ -219,15 +220,15 @@ def prune_nodes(_session):
 
         # prune visitations that no longer have a parent node
         if CONF['prune_visitations']:
-            deleted = _session.query(NodeVisitation) \
+            deleted = session.query(NodeVisitation) \
                 .outerjoin(Node, Node.id == NodeVisitation.parent_id) \
                 .filter(Node.address == None).delete(synchronize_session=False)
             logging.info("{} Visitations deleted".format(deleted))
 
-        _session.commit()
+        session.commit()
 
 
-def calculate_pending_nodes(session, start_time):
+def calculate_pending_nodes(start_time):
     now = datetime.datetime.utcnow()
     # Get a list of all never checked nodes, and nodes that have been checked recently:
     q = session.query(Node)
@@ -275,7 +276,7 @@ def calculate_pending_nodes(session, start_time):
     return q.all()
 
 
-def process_pending_nodes(node_addresses, node_processing_queue, recent_heights, thread_pool, session, mnodes=None):
+def process_pending_nodes(node_addresses, node_processing_queue, recent_heights, thread_pool, mnodes=None):
     futures_dict = {}
 
     checked_nodes = 0
@@ -378,8 +379,8 @@ def process_pending_nodes(node_addresses, node_processing_queue, recent_heights,
                 if not node.id:
                     session.commit()
                 vis = NodeVisitation(parent_id=node.id,
-                                     user_agent_id=get_user_agent_id(
-                                         result['user_agent'], session) if 'user_agent' in result else None,
+                                     user_agent_id=get_user_agent_id(result['user_agent'])
+                                     if 'user_agent' in result else None,
                                      success=result["seen"],
                                      timestamp=timestamp,
                                      height=result['height'] if result["seen"] else None)
@@ -395,12 +396,12 @@ def process_pending_nodes(node_addresses, node_processing_queue, recent_heights,
                     if not "{};{}".format(addr, n['port']) in node_addresses[result['network']]:
                         pending_nodes += 1
                         node_addresses[result['network']].add("{};{}".format(addr, n['port']))
-                        newNode = Node(network=str(result['network']), address=addr, port=int(n['port']),
-                                       services=int(n['services']))
+                        new_node = Node(network=str(result['network']), address=addr, port=int(n['port']),
+                                        services=int(n['services']))
                         if CONF['database_concurrency']:
-                            new_nodes_to_add.append(newNode)
+                            new_nodes_to_add.append(new_node)
                         else:
-                            session.add(newNode)
+                            session.add(new_node)
 
     if CONF['database_concurrency']:
         # Get all unchecked nodes and nodes first seen in the past hour,
@@ -409,10 +410,10 @@ def process_pending_nodes(node_addresses, node_processing_queue, recent_heights,
             .filter(or_(Node.first_checked == None,
                         Node.first_checked > datetime.datetime.utcnow() - datetime.timedelta(hours=1))) \
             .with_for_update().all()
-        newSet = {'{};{};{}'.format(n.network, n.address, n.port) for n in nn}
+        new_set = {'{};{};{}'.format(n.network, n.address, n.port) for n in nn}
         for i in reversed(range(len(new_nodes_to_add))):
             ni = '{};{};{}'.format(new_nodes_to_add[i].network, new_nodes_to_add[i].address, new_nodes_to_add[i].port)
-            if ni in newSet:
+            if ni in new_set:
                 del new_nodes_to_add[i]
 
     session.commit()
@@ -461,7 +462,7 @@ def update_masternode_list():
     return m_nodes
 
 
-def set_master_nodes(session, mnodes):
+def set_master_nodes(mnodes):
     if not mnodes:
         return
     window_idx = 0
@@ -516,35 +517,19 @@ def geocode_ip(address):
     return country, city, aso, asn
 
 
-def geocode_ip(address):
-    aso = None
-    asn = None
-    country = None
-    city = None
-    if not address.endswith(".onion"):
-        try:
-            aso = ASN.asn(address).autonomous_system_organization
-            asn = ASN.asn(address).autonomous_system_number
-        except AddressNotFoundError:
-            pass
-        try:
-            country = COUNTRY.country(address).country.name
-            country = RENAMED_COUNTRIES.get(country, country)
-            city = CITY.city(address).city.name
-        except AddressNotFoundError:
-            pass
-    return country, city, aso, asn
+def check_active(height, deviation_config):
+    return (deviation_config[1] - deviation_config[0]) <= height <= (deviation_config[1] + deviation_config[0])
 
 
-def dump_summary(session):
-    ## Set updated countries
+def dump_summary():
+    # Set updated countries
     for n in session.query(Node).all():
         n.country, n.city, n.aso, n.asn = geocode_ip(n.address, )
 
-    ## Get and set dash masternodes
+    # Get and set dash masternodes
     if CONF['get_dash_masternodes']:
         mnodes = update_masternode_list()
-        set_master_nodes(session, mnodes)
+        set_master_nodes(mnodes)
         logging.info("masternodes updated")
 
     q = session.query(Node.id, Node.network, Node.address, Node.port, Node.user_agent, Node.version, Node.asn, Node.aso,
@@ -560,7 +545,7 @@ def dump_summary(session):
         logging.warning("Nodes table is empty, no results to dump")
         return
 
-    ## Exclude user agents
+    # Exclude user agents
     if CONF['excluded_user_agents']:
         for agent_re in CONF['excluded_user_agents']:
             agent_re = re.compile(agent_re)
@@ -592,27 +577,27 @@ def dump_summary(session):
 
     networks = nodes['network'].unique()
 
-    ## Calculate summaries
+    # Calculate summaries
     summaries = {}
     for network in networks:
-        summ_df = nodes[(nodes['network'] == network) &
-                        (nodes['last_seen'] > datetime.datetime.utcnow() - datetime.timedelta(
-                            hours=8))]
-        if summ_df.empty:
+        summary_df = nodes[(nodes['network'] == network) &
+                           (nodes['last_seen'] > datetime.datetime.utcnow() - datetime.timedelta(
+                               hours=8))]
+        if summary_df.empty:
             continue
 
         summaries[network] = {
-            "min": int(summ_df['last_height'].fillna(np.inf).min()),
-            "max": int(summ_df['last_height'].fillna(0.0).max()),
-            "mean": float(summ_df['last_height'].mean()),
-            "stdev": float(summ_df['last_height'].std()),
-            "med": float(summ_df['last_height'].median()),
-            "1q": float(np.percentile(summ_df['last_height'], 25)),
-            "3q": float(np.percentile(summ_df['last_height'], 75)),
-            "2.5pct": float(np.percentile(summ_df['last_height'], 1)),
-            "97.5pct": float(np.percentile(summ_df['last_height'], 99)),
+            "min": int(summary_df['last_height'].fillna(np.inf).min()),
+            "max": int(summary_df['last_height'].fillna(0.0).max()),
+            "mean": float(summary_df['last_height'].mean()),
+            "stdev": float(summary_df['last_height'].std()),
+            "med": float(summary_df['last_height'].median()),
+            "1q": float(np.percentile(summary_df['last_height'], 25)),
+            "3q": float(np.percentile(summary_df['last_height'], 75)),
+            "2.5pct": float(np.percentile(summary_df['last_height'], 1)),
+            "97.5pct": float(np.percentile(summary_df['last_height'], 99)),
             "age_min": nodes[nodes['network'] == network]['last_seen'].min().timestamp(),
-            "age_max": summ_df['last_seen'].max().timestamp()
+            "age_max": summary_df['last_seen'].max().timestamp()
         }
         summaries[network]['iqr'] = summaries[network]['3q'] - summaries[network]['1q']
         summaries[network]['95_range'] = summaries[network]['97.5pct'] - summaries[network]['2.5pct']
@@ -626,14 +611,11 @@ def dump_summary(session):
             CONF['inactive_threshold'][network] if network in CONF['inactive_threshold'] else
             CONF['inactive_threshold']['default']) for network in networks}
     else:
-        deviations = {network: CONF['inactive_threshold'][network] if network in CONF['inactive_threshold'] else
-        CONF['inactive_threshold']['default'] for network in networks}
+        deviations = {net: CONF['inactive_threshold'][net] if net in CONF['inactive_threshold'] else \
+            CONF['inactive_threshold']['default'] for net in networks}
 
     for i in deviations:
         deviations[i] = (deviations[i], summaries[i]['3q'])
-
-    def check_active(height, deviations):
-        return True if (deviations[1] - deviations[0]) <= height <= (deviations[1] + deviations[0]) else False
 
     nodes['is_active'] = nodes[['network', 'last_height']] \
         .apply(lambda x: check_active(x['last_height'], deviations[x['network']]), axis=1)
@@ -648,47 +630,40 @@ def dump_summary(session):
         f.write(space_sep_df(nodes))
 
     for network in nodes['network'].unique():
-        netDF = nodes[nodes['network'] == network].copy()
-        netDF = netDF.drop(['network'], 1)
+        net_df = nodes[nodes['network'] == network].copy()
+        net_df = net_df.drop(['network'], 1)
 
-        out_dict = {}
-        out_dict['data'] = netDF.to_dict(orient="records")
-
-        netDF.to_csv("static/data_{}.csv".format(network), index=False)
+        net_df.to_csv("static/data_{}.csv".format(network), index=False)
         with open(os.path.join("static", "data_{}.json".format(network)), "w") as f:
-            json.dump(out_dict, f)
+            json.dump({'data': net_df.to_dict(orient="records")}, f)
         with open(os.path.join("static", "data_{}.txt".format(network)), "w") as f:
-            f.write(space_sep_df(netDF))
+            f.write(space_sep_df(net_df))
 
     nodes = nodes.drop(['user_agent', 'version', 'last_height'], 1)
-    out_dict = {}
-    out_dict['data'] = nodes.to_dict(orient="records")
     with open(os.path.join("static", "data.json"), "w") as f:
-        json.dump(out_dict, f)
+        json.dump({'data': nodes.to_dict(orient="records")}, f)
 
-    ## Write unique addresses only
-    group_nets = lambda x: ", ".join(sorted(set(x)))
+    # Write unique addresses only
+    def group_nets(x):
+        return ", ".join(sorted(set(x)))
+
     nodes = nodes.groupby(by=['address', 'asn', 'aso', 'country', 'city', 'address_type'], as_index=False).agg(
         {"network": group_nets, "2h": "mean", "8h": "mean", "24h": "mean", "7d": "mean", "30d": "mean"})
     nodes.to_csv("static/data_unique.csv", index=False)
 
-    out_dict = {}
-    out_dict['data'] = nodes.to_dict(orient="records")
     with open(os.path.join("static", "data_unique.json"), "w") as f:
-        json.dump(out_dict, f)
+        json.dump({'data': nodes.to_dict(orient="records")}, f)
     with open(os.path.join("static", "data_unique.txt"), "w") as f:
         f.write(space_sep_df(nodes))
 
     for network in networks:
-        netDF = nodes[nodes['network'].str.contains(network)]
-        netDF = netDF.drop(['network'], 1)
-        netDF.to_csv("static/data_{}_unique.csv".format(network), index=False)
-        out_dict = {}
-        out_dict['data'] = netDF.to_dict(orient="records")
+        net_df = nodes[nodes['network'].str.contains(network)]
+        net_df = net_df.drop(['network'], 1)
+        net_df.to_csv("static/data_{}_unique.csv".format(network), index=False)
         with open(os.path.join("static", "data_{}_unique.json".format(network)), "w") as f:
-            json.dump(out_dict, f)
+            json.dump({'data': net_df.to_dict(orient="records")}, f)
         with open(os.path.join("static", "data_{}_unique.txt".format(network)), "w") as f:
-            f.write(space_sep_df(netDF))
+            f.write(space_sep_df(net_df))
 
 
 def space_sep_df(df, spacing=3):
@@ -702,12 +677,12 @@ def space_sep_df(df, spacing=3):
     return out_str
 
 
-def main(session, seed=False):
+def main(seed=False):
     start_time = datetime.datetime.utcnow()
     thread_pool = ThreadPoolExecutor(max_workers=CONF['threads'])
     networks = list(CONF['networks'].keys())
-    prune_nodes(session)
-    node_addresses, recent_heights = init_crawler(session, networks)
+    prune_nodes()
+    node_addresses, recent_heights = init_crawler(networks)
 
     if CONF['get_dash_masternodes']:
         mnodes = update_masternode_list()
@@ -721,27 +696,27 @@ def main(session, seed=False):
                 session.add(n)
         session.commit()
 
-    node_processing_queue = calculate_pending_nodes(session, start_time)
+    node_processing_queue = calculate_pending_nodes(start_time)
     while node_processing_queue:
         node_processing_queue, node_addresses = process_pending_nodes(node_addresses, node_processing_queue,
-                                                                      recent_heights, thread_pool, session, mnodes)
-        node_processing_queue = calculate_pending_nodes(session, start_time)
+                                                                      recent_heights, thread_pool, mnodes)
+        node_processing_queue = calculate_pending_nodes(start_time)
     logging.info("Crawling complete in {} seconds".format(round((datetime.datetime.utcnow() - start_time).seconds, 1)))
 
 
-def dump(session):
+def dump():
     start_time = datetime.datetime.utcnow()
-    dump_summary(session)
-    generate_historic_data(session)
+    dump_summary()
+    generate_historic_data()
     logging.info("Results saved in {} seconds".format(round((datetime.datetime.utcnow() - start_time).seconds, 1)))
 
 
-def generate_historic_data(_session):
-    networks = [x[0] for x in _session.query(Node.network).distinct()]
-    sd = _session.query(func.min(Node.first_seen)).one()[0]
+def generate_historic_data():
+    networks = [x[0] for x in session.query(Node.network).distinct()]
+    sd = session.query(func.min(Node.first_seen)).one()[0]
     start_date = datetime.datetime(sd.year, sd.month, sd.day,
                                    sd.hour // CONF['historic_interval'] * CONF['historic_interval'], 0, 0)
-    end_date = _session.query(func.max(Node.last_seen)).one()[0]
+    end_date = session.query(func.max(Node.last_seen)).one()[0]
 
     historic_interval = datetime.timedelta(hours=CONF['historic_interval'])
 
@@ -750,23 +725,23 @@ def generate_historic_data(_session):
         last_date += historic_interval
 
     interval_end = start_date + historic_interval
-    _session.query(CrawlSummary).filter(
+    session.query(CrawlSummary).filter(
         CrawlSummary.timestamp >= (last_date - datetime.timedelta(hours=CONF['historic_interval'] * 1.5))).delete()
-    _session.commit()
+    session.commit()
     while interval_end < end_date:
-        if _session.query(CrawlSummary).filter(CrawlSummary.timestamp == interval_end).count() >= 1:
+        if session.query(CrawlSummary).filter(CrawlSummary.timestamp == interval_end).count() >= 1:
             interval_end += historic_interval
             continue
         logging.info("Summarizing period starting with {}".format(interval_end - historic_interval))
 
-        sv_sq = _session.query(UserAgent.id).filter(UserAgent.user_agent.ilike("% SV%")).subquery()
+        sv_sq = session.query(UserAgent.id).filter(UserAgent.user_agent.ilike("% SV%")).subquery()
 
         case_stmt = case([(sv_sq.c.id != None, 'bitcoin-sv')], else_=Node.network)
 
-        q = _session.query(NodeVisitation.parent_id.label("id"),
-                           case_stmt.label("network"),
-                           func.max(NodeVisitation.height).label("height"),
-                           func.max(case([(NodeVisitation.is_masternode, 1)], else_=0)).label("is_masternode")) \
+        q = session.query(NodeVisitation.parent_id.label("id"),
+                          case_stmt.label("network"),
+                          func.max(NodeVisitation.height).label("height"),
+                          func.max(case([(NodeVisitation.is_masternode, 1)], else_=0)).label("is_masternode")) \
             .join(sv_sq, NodeVisitation.user_agent_id == sv_sq.c.id) \
             .join(Node, Node.id == NodeVisitation.parent_id) \
             .filter(NodeVisitation.timestamp >= interval_end - historic_interval) \
@@ -781,12 +756,10 @@ def generate_historic_data(_session):
         if not df.empty:
             networks = df['network'].unique()
 
-            def check_active(height, deviations):
-                return True if (deviations[1] - deviations[0]) <= height <= (deviations[1] + deviations[0]) else False
-
             medians = df.groupby(by=['network']).agg({"height": "median"})
-            deviations = {network: CONF['inactive_threshold'][network] if network in CONF['inactive_threshold'] else
-            CONF['inactive_threshold']['default'] for network in networks}
+            deviations = {network: CONF['inactive_threshold'][network] if network in CONF['inactive_threshold'] else \
+                CONF['inactive_threshold']['default'] for network in networks}
+
             for i in list(deviations.keys()):
                 if i in medians.index:
                     deviations[i] = (deviations[i], medians.loc[i]['height'])
@@ -798,19 +771,19 @@ def generate_historic_data(_session):
             df = df[df['active']].drop(['active'], 1)
 
         for network in networks:
-            netDF = df[df['network'] == network]
+            net_df = df[df['network'] == network]
             cs = CrawlSummary(timestamp=interval_end,
                               network=network,
-                              node_count=len(netDF),
-                              masternode_count=sum(netDF['is_masternode']),
+                              node_count=len(net_df),
+                              masternode_count=sum(net_df['is_masternode']),
                               lookback_hours=CONF['historic_interval'])
 
-            _session.add(cs)
-            _session.commit()
+            session.add(cs)
+            session.commit()
 
         interval_end += datetime.timedelta(hours=CONF['historic_interval'])
 
-    q = _session.query(CrawlSummary).order_by(CrawlSummary.timestamp)
+    q = session.query(CrawlSummary).order_by(CrawlSummary.timestamp)
     df = pd.read_sql(q.statement, q.session.bind)
     df['timestamp'] = df['timestamp'].values.astype(np.int64) // 10 ** 9
 
@@ -819,14 +792,14 @@ def generate_historic_data(_session):
             .to_json("static/history_{}.json".format(network), orient='records')
 
 
-def prune_database(_session):
+def prune_database():
     if not os.path.isdir("db_cache"):
         os.mkdir("db_cache")
 
-    q = _session.query(Node)
+    q = session.query(Node)
     nodes = pd.read_sql(q.statement, q.session.bind)
 
-    fv = _session.query(func.min(NodeVisitation.timestamp)).first()[0]
+    fv = session.query(func.min(NodeVisitation.timestamp)).first()[0]
     end_date = datetime.datetime.utcnow() - datetime.timedelta(hours=24 * CONF['max_pruning_age'])
     end_date = datetime.datetime(end_date.year, end_date.month, end_date.day, 0, 0, 0)
 
@@ -834,7 +807,7 @@ def prune_database(_session):
     current_end = current_date + datetime.timedelta(days=1)
 
     while current_end < end_date:
-        vq = _session.query(NodeVisitation) \
+        vq = session.query(NodeVisitation) \
             .filter(NodeVisitation.timestamp >= current_date) \
             .filter(NodeVisitation.timestamp < current_end)
 
@@ -863,7 +836,7 @@ def prune_database(_session):
         an.to_csv(f_name_alt, compression="gzip", index=False)
 
         deleted = vq.delete()
-        _session.commit()
+        session.commit()
 
         current_date = current_date + datetime.timedelta(days=1)
         current_end = current_date + datetime.timedelta(days=1)
@@ -871,39 +844,39 @@ def prune_database(_session):
 
 
 if __name__ == "__main__":
-    session = init_db()
+
     if "--crawl" in sys.argv:
-        main(session, seed=True if "--seed" in sys.argv else False)
+        main(seed=True if "--seed" in sys.argv else False)
 
     if "--dump" in sys.argv:
-        dump(session)
+        dump()
 
     if "--prune" in sys.argv:
-        prune_database(session)
+        prune_database()
 
     if "--daemon" in sys.argv:
         conf = CONF.get('daemon', {})
         crawl_interval = int(conf.get('crawl_interval', 15))
         dump_interval = int(conf.get('dump_interval', 60))
         prune_interval = conf.get('prune_interval', None)
-        now = int(time.time())
+        current = int(time.time())
         last_minutes = -1
 
-        main(session, seed=True)
-        dump(session)
+        main(seed=True)
+        dump()
         if prune_interval is not None:
-            prune_database(session)
+            prune_database()
         while True:
-            minutes = int(now / 60)
+            minutes = int(current / 60)
             if minutes != last_minutes:
                 last_minutes = minutes
                 if minutes % crawl_interval == 0:
-                    main(session, seed=False)
+                    main(seed=False)
                 if minutes % dump_interval == 0:
-                    dump(session)
+                    dump()
                 if prune_interval is not None and minutes % int(prune_interval) == 0:
-                    prune_database(session)
+                    prune_database()
 
-            now += 1
-            while now > time.time():
+            current += 1
+            while current > time.time():
                 time.sleep(0.1)
