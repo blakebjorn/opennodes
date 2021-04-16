@@ -21,24 +21,24 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
+import datetime
 import gzip
 import json
 import os
 import sys
 from io import BytesIO
 
+import pandas as pd
 import waitress
 from flask import Flask, render_template, request, redirect, flash, Response
 from flask_sqlalchemy import SQLAlchemy
 from geoip2.errors import AddressNotFoundError
 from sqlalchemy import and_
 
+from autodoc import Autodoc
 from config import load_config, DATABASE_URI
 from crawler import COUNTRY, CITY, ASN, connect, update_masternode_list
-from models import *
-import pandas as pd
-from autodoc import Autodoc
+from models import Node, NodeVisitation
 
 app = Flask(__name__)
 auto = Autodoc(app)
@@ -377,6 +377,7 @@ def main():
         waitress.serve(app, host=os.environ.get("SERVER_HOST", "127.0.0.1"), port=os.environ.get("SERVER_PORT", 5000))
     else:
         app.run("0.0.0.0", debug=True, port=5000)
+
 
 if __name__ == '__main__':
     main()

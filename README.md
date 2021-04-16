@@ -12,7 +12,9 @@ Copy the .mmdb files into the `geoip` directory otherwise no country/ASN info wi
 copy `.env.dist` to `.env` and change any values as necessary. Delete all database entries to use sqlite
 
 ### Usage (Docker)
+The crawler runs in the `host` network mode to alleviate any issues connecting to external ipv6 addresses. You will need Tor installed on the host machine if you want to crawl onion nodes.
 ```
+cp .env.dist .env
 docker-compose up
 ```
 

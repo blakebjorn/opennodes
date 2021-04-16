@@ -63,7 +63,7 @@ def get_user_agent_id(user_agent):
             u = UserAgent(user_agent=user_agent)
             session.add(u)
             session.flush()
-            print(">", u.id, user_agent)
+            logging.info(f"New User Agent > {u.id} {u.user_agent}")
         USER_AGENTS[str(user_agent)] = int(u.id)
     return USER_AGENTS[user_agent]
 
@@ -178,7 +178,7 @@ def init_crawler(networks):
     node_addresses = {}
     recent_heights = {}
     for network in set(db_networks + networks):
-        node_addresses[network] = {"{};{}".format(y.address, y.port) for y in
+        node_addresses[network] = {f"{y.address};{y.port}" for y in
                                    session.query(Node.address, Node.port).filter(Node.network == network).all()}
         count = session.query(Node).filter(and_(Node.network == network, Node.last_height != None)).count()
         if count > 0:
@@ -198,8 +198,8 @@ def check_dns(network_data, node_addresses):
         dns_node_addrs = get_seeds(nc['port'], nc['dns_seeds'], nc['address_seeds'], default_services=nc['services'])
         for nodeAddr in dns_node_addrs:
             if nodeAddr[0] and nodeAddr[1]:
-                if not "{};{}".format(nodeAddr[0], nodeAddr[1]) in node_addresses[network]:
-                    node_addresses[network].add("{};{}".format(nodeAddr[0], nodeAddr[1]))
+                if not f"{nodeAddr[0]};{nodeAddr[1]}" in node_addresses[network]:
+                    node_addresses[network].add(f"{nodeAddr[0]};{nodeAddr[1]}")
                     new_node = Node(network=network, address=nodeAddr[0],
                                     port=int(nodeAddr[1]), services=int(nodeAddr[2]))
                     nodes.append(new_node)
@@ -216,14 +216,14 @@ def prune_nodes():
         )).delete()
 
     if pruned > 0:
-        logging.info("Pruned {} nodes".format(pruned))
+        logging.info(f"Pruned {pruned} nodes")
 
         # prune visitations that no longer have a parent node
         if CONF['prune_visitations']:
             deleted = session.query(NodeVisitation) \
                 .outerjoin(Node, Node.id == NodeVisitation.parent_id) \
                 .filter(Node.address == None).delete(synchronize_session=False)
-            logging.info("{} Visitations deleted".format(deleted))
+            logging.info(f"{deleted} Visitations deleted")
 
         session.commit()
 
@@ -264,7 +264,7 @@ def calculate_pending_nodes(start_time):
     else:
         count = q.count()
     if count > CONF['max_queue']:
-        logging.info("{} nodes pending".format(count))
+        logging.info(f"{count} nodes pending")
 
     if CONF['database_concurrency']:
         nodes = q.with_for_update().all()
@@ -310,15 +310,15 @@ def process_pending_nodes(node_addresses, node_processing_queue, recent_heights,
 
     while node_processing_queue:
         node = node_processing_queue.pop(0)
-        if "{}|{}".format(node.address, node.port) in active_ips and \
-                active_ips["{}|{}".format(node.address, node.port)][0] != node.network:
+        if f"{node.address}|{node.port}" in active_ips and \
+                active_ips[f"{node.address}|{node.port}"][0] != node.network:
             node.last_checked = datetime.datetime.utcnow()
             session.add(node)
             skipped_nodes += 1
             continue
         future = thread_pool.submit(connect, node.network, node.address, node.port, node.services,
                                     CONF['networks'][node.network])
-        futures_dict["{}|{}|{}".format(node.network, node.address, node.port)] = node, future
+        futures_dict[f"{node.network}|{node.address}|{node.port}"] = node, future
         time.sleep(0.001)
 
     total_to_complete = len(futures_dict)
@@ -331,7 +331,7 @@ def process_pending_nodes(node_addresses, node_processing_queue, recent_heights,
 
             checked_nodes += 1
             if checked_nodes % 1000 == 0:
-                logging.info(" {}%".format(round(checked_nodes / total_to_complete * 100.0, 1)))
+                logging.info(f" {round(checked_nodes / total_to_complete * 100.0, 1)}%")
 
             node, future = futures_dict.pop(i)
             result, new_addrs = future.result()
@@ -346,7 +346,7 @@ def process_pending_nodes(node_addresses, node_processing_queue, recent_heights,
                 elif result['attempt'] < CONF['retries'] + 1:
                     future = thread_pool.submit(connect, node.network, node.address, node.port, node.services,
                                                 CONF['networks'][node.network], attempt=result['attempt'] + 1)
-                    futures_dict["{}|{}|{}".format(node.network, node.address, node.port)] = node, future
+                    futures_dict[f"{node.network}|{node.address}|{node.port}"] = node, future
                     total_to_complete += 1
                     retried_nodes += 1
                     continue
@@ -385,7 +385,7 @@ def process_pending_nodes(node_addresses, node_processing_queue, recent_heights,
                                      timestamp=timestamp,
                                      height=result['height'] if result["seen"] else None)
 
-                if mnodes and node.network == "dash" and "{}:{}".format(node.address, node.port) in mnodes:
+                if mnodes and node.network == "dash" and f"{node.address}:{node.port}" in mnodes:
                     vis.is_masternode = True
 
                 session.add(vis)
@@ -393,9 +393,9 @@ def process_pending_nodes(node_addresses, node_processing_queue, recent_heights,
             if new_addrs:
                 for n in new_addrs:
                     addr = n['ipv4'] or n['ipv6'] or n['onion']
-                    if not "{};{}".format(addr, n['port']) in node_addresses[result['network']]:
+                    if not f"{addr};{n['port']}" in node_addresses[result['network']]:
                         pending_nodes += 1
-                        node_addresses[result['network']].add("{};{}".format(addr, n['port']))
+                        node_addresses[result['network']].add(f"{addr};{n['port']}")
                         new_node = Node(network=str(result['network']), address=addr, port=int(n['port']),
                                         services=int(n['services']))
                         if CONF['database_concurrency']:
@@ -410,23 +410,20 @@ def process_pending_nodes(node_addresses, node_processing_queue, recent_heights,
             .filter(or_(Node.first_checked == None,
                         Node.first_checked > datetime.datetime.utcnow() - datetime.timedelta(hours=1))) \
             .with_for_update().all()
-        new_set = {'{};{};{}'.format(n.network, n.address, n.port) for n in nn}
+        new_set = {f"{n.network};{n.address};{n.port}" for n in nn}
         for i in reversed(range(len(new_nodes_to_add))):
-            ni = '{};{};{}'.format(new_nodes_to_add[i].network, new_nodes_to_add[i].address, new_nodes_to_add[i].port)
+            ni = f"{new_nodes_to_add[i].network};{new_nodes_to_add[i].address};{new_nodes_to_add[i].port}"
             if ni in new_set:
                 del new_nodes_to_add[i]
 
     session.commit()
-    logging.info(
-        "Checked {} Nodes, {} Seen, {} More queued up. ({}/{} retry successes, {} skipped x-network nodes)".format(
-            checked_nodes - retried_nodes, seen_nodes, pending_nodes, found_on_retry, retried_nodes, skipped_nodes))
+    logging.info(f"Checked {checked_nodes - retried_nodes} Nodes, {seen_nodes} Seen, {pending_nodes} More queued up. "
+                 f"({found_on_retry}/{retried_nodes} retry successes, {skipped_nodes} skipped x-network nodes)")
     return node_processing_queue, node_addresses
 
 
 def update_masternode_list():
-    # import requests
     if os.environ.get("DASH_RPC_URI"):
-        print("GETTING MASTERNODES")
         resp = requests.post(os.environ.get("DASH_RPC_URI"),
                              json={"jsonrpc": "2.0", "id": "jsonrpc", "method": "masternode", "params": ["list"]},
                              auth=(os.environ.get("DASH_RPC_USER"), os.environ.get("DASH_RPC_PASS")))
@@ -435,7 +432,7 @@ def update_masternode_list():
         comm = "dash-cli"
         if os.path.isdir(CONF['dash_cli_path']):
             comm = os.path.join(CONF['dash_cli_path'], "dash-cli")
-        masternodes = os.popen('{} masternode list full'.format(comm)).read().strip()
+        masternodes = os.popen(f"{comm} masternode list full").read().strip()
         masternodes = json.loads(masternodes)
 
     m_nodes = set()
@@ -462,8 +459,8 @@ def update_masternode_list():
     return m_nodes
 
 
-def set_master_nodes(mnodes):
-    if not mnodes:
+def set_master_nodes(m_nodes):
+    if not m_nodes:
         return
     window_idx = 0
     window_size = 10000
@@ -474,7 +471,7 @@ def set_master_nodes(mnodes):
         if nodes is None:
             break
         for n in nodes:
-            if n.address + ":" + str(n.port) in mnodes:
+            if n.address + ":" + str(n.port) in m_nodes:
                 n.is_masternode = True
                 session.add(n)
             elif n.is_masternode:
@@ -566,7 +563,7 @@ def dump_summary():
         df[label] = (df['success'] / df['total']).fillna(0.0)
         nodes = nodes.merge(df[['id', label]], how="left")
         labels.append(label)
-        logging.info("done {} in {}".format(label, round(time.time() - stt, 3)))
+        logging.info(f"done {label} in {round(time.time() - stt, 3)}s")
     nodes = nodes.drop(['id'], 1)
     nodes[labels] = nodes[labels].fillna(0.0).round(3)
     nodes[['network', 'address']] = nodes[['network', 'address']].fillna("")
@@ -633,10 +630,10 @@ def dump_summary():
         net_df = nodes[nodes['network'] == network].copy()
         net_df = net_df.drop(['network'], 1)
 
-        net_df.to_csv("static/data_{}.csv".format(network), index=False)
-        with open(os.path.join("static", "data_{}.json".format(network)), "w") as f:
+        net_df.to_csv(f"static/data_{network}.csv", index=False)
+        with open(os.path.join("static", f"data_{network}.json"), "w") as f:
             json.dump({'data': net_df.to_dict(orient="records")}, f)
-        with open(os.path.join("static", "data_{}.txt".format(network)), "w") as f:
+        with open(os.path.join("static", f"data_{network}.txt"), "w") as f:
             f.write(space_sep_df(net_df))
 
     nodes = nodes.drop(['user_agent', 'version', 'last_height'], 1)
@@ -659,10 +656,10 @@ def dump_summary():
     for network in networks:
         net_df = nodes[nodes['network'].str.contains(network)]
         net_df = net_df.drop(['network'], 1)
-        net_df.to_csv("static/data_{}_unique.csv".format(network), index=False)
-        with open(os.path.join("static", "data_{}_unique.json".format(network)), "w") as f:
+        net_df.to_csv(os.path.join("static", f"data_{network}_unique.csv"), index=False)
+        with open(os.path.join("static", f"data_{network}_unique.json"), "w") as f:
             json.dump({'data': net_df.to_dict(orient="records")}, f)
-        with open(os.path.join("static", "data_{}_unique.txt".format(network)), "w") as f:
+        with open(os.path.join("static", f"data_{network}_unique.txt"), "w") as f:
             f.write(space_sep_df(net_df))
 
 
@@ -701,14 +698,14 @@ def main(seed=False):
         node_processing_queue, node_addresses = process_pending_nodes(node_addresses, node_processing_queue,
                                                                       recent_heights, thread_pool, mnodes)
         node_processing_queue = calculate_pending_nodes(start_time)
-    logging.info("Crawling complete in {} seconds".format(round((datetime.datetime.utcnow() - start_time).seconds, 1)))
+    logging.info(f"Crawling complete in {round((datetime.datetime.utcnow() - start_time).seconds, 1)} seconds")
 
 
 def dump():
     start_time = datetime.datetime.utcnow()
     dump_summary()
     generate_historic_data()
-    logging.info("Results saved in {} seconds".format(round((datetime.datetime.utcnow() - start_time).seconds, 1)))
+    logging.info(f"Results saved in {round((datetime.datetime.utcnow() - start_time).seconds, 1)} seconds")
 
 
 def generate_historic_data():
@@ -732,7 +729,7 @@ def generate_historic_data():
         if session.query(CrawlSummary).filter(CrawlSummary.timestamp == interval_end).count() >= 1:
             interval_end += historic_interval
             continue
-        logging.info("Summarizing period starting with {}".format(interval_end - historic_interval))
+        logging.info(f"Summarizing period starting with {interval_end - historic_interval}")
 
         sv_sq = session.query(UserAgent.id).filter(UserAgent.user_agent.ilike("% SV%")).subquery()
 
@@ -789,7 +786,7 @@ def generate_historic_data():
 
     for network in networks:
         df[df['network'] == network][['timestamp', 'node_count', 'masternode_count']] \
-            .to_json("static/history_{}.json".format(network), orient='records')
+            .to_json(os.path.join("static", f"history_{network}.json"), orient='records')
 
 
 def prune_database():
@@ -840,7 +837,7 @@ def prune_database():
 
         current_date = current_date + datetime.timedelta(days=1)
         current_end = current_date + datetime.timedelta(days=1)
-        print(f"pruned up to {current_end} // {deleted} visitations removed")
+        logging.info(f"pruned up to {current_end} // {deleted} visitations removed")
 
 
 if __name__ == "__main__":

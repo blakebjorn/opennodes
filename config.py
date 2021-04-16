@@ -35,7 +35,8 @@ dotenv.load_dotenv()
 
 if os.environ.get("DB_HOST"):
     DATABASE_URI = f"{os.environ['DB_TYPE']}://{os.environ['DB_USER']}:{os.environ['DB_PASS']}@" \
-                   f"{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/{os.environ['DB_NAME']}"
+                   f"{os.environ.get('DB_HOST_OVERRIDE', os.environ['DB_HOST'])}:{os.environ['DB_PORT']}/" \
+                   f"{os.environ['DB_NAME']}"
 else:
     DATABASE_URI = os.environ.get("DATABASE_URI", "sqlite:///nodes.sqlite")
 

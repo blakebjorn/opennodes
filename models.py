@@ -230,7 +230,7 @@ class NodeVisitation(Base):
         return field
 
     def __repr__(self):
-        return "<CHECK - {}:{};{} - {}>".format(self.network, self.address, self.port, self.success)
+        return "<CHECK - {}:{};{} - {}>".format(self.id, self.parent_id, self.timestamp, self.success)
 
 
 def init_db():
@@ -239,8 +239,7 @@ def init_db():
     else:
         engine = create_engine(config.DATABASE_URI, echo=False)
     Base.metadata.create_all(engine)
-    Sess = sessionmaker(bind=engine, autoflush=False)
-    return Sess()
+    return sessionmaker(bind=engine, autoflush=False)()
 
 
 session = init_db()

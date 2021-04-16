@@ -1,6 +1,29 @@
 version: '2.3'
 
 services:
+  opennodes_crawler:
+    restart: always
+    network_mode: "host"
+    depends_on:
+      - opennodes_postgres
+      - opennodes_dashd
+    container_name: opennodes-crawler
+    build:
+      context: ""
+      dockerfile: Dockerfile
+    volumes:
+      - ./static:/static
+      - ./geoip:/geoip
+      - ./db_cache:/db_cache
+    entrypoint:
+      - python
+      - crawler.py
+      - --daemon
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "2m"
+        max-file: "1"
   opennodes_postgres:
     restart: always
     container_name: opennodes-postgres
@@ -20,22 +43,20 @@ services:
       options:
         max-size: "2m"
         max-file: "1"
-  opennodes_crawler:
+  opennodes_dashd:
     restart: always
-    depends_on:
-      - opennodes_postgres
-    container_name: opennodes-crawler
-    build:
-      context: ""
-      dockerfile: Dockerfile
+    container_name: opennodes-dashd
+    build: https://github.com/dashpay/docker-dashd.git
+    ports:
+      - "9999:9999"
+      - "127.0.0.1:9998:9998"
     volumes:
-      - ./static:/static
-      - ./geoip:/geoip
-      - ./db_cache:/db_cache
-    entrypoint:
-      - python
-      - crawler.py
-      - --daemon
+      - ./dash:/dash
+    environment:
+      DISABLEWALLET: 1
+      PRINTTOCONSOLE: 1
+      RPCUSER: "${DASH_RPC_USER}"
+      RPCPASSWORD: "${DASH_RPC_PASS}"
     logging:
       driver: "json-file"
       options:
@@ -59,45 +80,10 @@ services:
       - python
       - server.py
       - --prod
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "2m"
-        max-file: "1"
-  opennodes_dashd:
-    restart: always
-    container_name: opennodes-dashd
-    build: https://github.com/dashpay/docker-dashd.git
-    ports:
-      - "9999:9999"
-      - "127.0.0.1:9998:9998"
-    volumes:
-      - ./dash:/dash
     environment:
-      DISABLEWALLET: 1
-      PRINTTOCONSOLE: 1
-      RPCUSER: myrpcuser
-      RPCPASSWORD: myrpcpassword
+      DB_HOST_OVERRIDE: "opennodes_postgres"
     logging:
       driver: "json-file"
       options:
         max-size: "2m"
         max-file: "1"
-  opennodes_tor:
-    restart: always
-    container_name: opennodes-tor
-    image: dperson/torproxy
-    ports:
-      - "127.0.0.1:9050:9050"
-      - "8118:8118"
-  opennodes_ipv6nat:
-    restart: always
-    container_name: opennodes-ipv6nat
-    image: robbertkl/ipv6nat
-    network_mode: "host"
-    privileged: true
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /lib/modules:/lib/modules:ro
-
-
